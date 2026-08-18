@@ -371,6 +371,19 @@ class ConsumeItem(BaseModel):
 class BatchConsumeRequest(BaseModel):
     items: list[ConsumeItem]
     reason: str = "consumed"
+    # Which GlucoTracker entry caused this. Without it a consumption cannot be
+    # undone when that entry is deleted: the transaction referenced the lot it
+    # came out of, which says what changed but not why.
+    glucotracker_meal_id: uuid.UUID | None = None
+
+
+class ConsumeRevertRequest(BaseModel):
+    glucotracker_meal_id: uuid.UUID
+
+
+class ConsumeRevertResponse(BaseModel):
+    reverted_lots: int
+    reverted_containers: int
 
 
 class ConsumptionCreate(BaseModel):
