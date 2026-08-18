@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import or_, select, update
@@ -192,7 +193,15 @@ class EnrichmentWorker:
                 ProductAlias.normalized_name == line.normalized_name,
             )
         )
-        return alias.product if alias is not None else None
+        if alias is not None and alias.product is not None:
+            if (
+                line.package_quantity is not None
+                and alias.product.net_quantity is not None
+                and abs(alias.product.net_quantity - line.package_quantity) > line.package_quantity * Decimal("0.2")
+            ):
+                return None
+            return alias.product
+        return None
 
     def _upsert_product(
         self, session: Session, line: ReceiptLine, result: EnrichmentResult
@@ -204,13 +213,23 @@ class EnrichmentWorker:
                 select(Product).where(Product.owner_id == line.owner_id, Product.gtin == gtin)
             )
         status = EnrichmentStatus.VERIFIED if result.verified else EnrichmentStatus.ESTIMATED
+        
+        # Determine actual net quantity: prefer receipt package size if search result diverges by >20%
+        final_net_qty = result.net_quantity or line.package_quantity
+        if (
+            line.package_quantity is not None
+            and result.net_quantity is not None
+            and abs(result.net_quantity - line.package_quantity) > line.package_quantity * Decimal("0.2")
+        ):
+            final_net_qty = line.package_quantity
+
         if product is None:
             product = Product(
                 owner_id=line.owner_id,
                 canonical_name=result.canonical_name,
                 brand=result.brand,
                 gtin=gtin,
-                net_quantity=result.net_quantity or line.package_quantity,
+                net_quantity=final_net_qty,
                 net_unit=_unit(result.net_unit or line.package_unit),
                 kcal_per_100=result.kcal_per_100,
                 protein_per_100=result.protein_per_100,
@@ -219,7 +238,7 @@ class EnrichmentWorker:
                 nutrition_status=status,
                 confidence=result.confidence,
                 image_url=result.image_url,
-                piece_weight_g=result.piece_weight_g,
+                piece_weight_g=result.piece_weight_g or final_net_qty,
                 nutrition_source_url=result.nutrition_source_url,
                 image_source_url=result.image_source_url,
             )
@@ -228,9 +247,9 @@ class EnrichmentWorker:
         elif product.nutrition_status != EnrichmentStatus.VERIFIED or result.verified:
             product.canonical_name = result.canonical_name
             product.brand = result.brand or product.brand
-            product.net_quantity = result.net_quantity or product.net_quantity
+            product.net_quantity = final_net_qty or product.net_quantity
             product.net_unit = _unit(result.net_unit) or product.net_unit
-            product.piece_weight_g = result.piece_weight_g or product.piece_weight_g
+            product.piece_weight_g = result.piece_weight_g or final_net_qty or product.piece_weight_g
             product.kcal_per_100 = result.kcal_per_100
             product.protein_per_100 = result.protein_per_100
             product.fat_per_100 = result.fat_per_100

@@ -1,5 +1,7 @@
 import uuid
+from decimal import Decimal
 
+from fastapi import HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -27,6 +29,7 @@ def _find_product(
     merchant_inn: str,
     normalized_name: str,
     gtin: str | None,
+    package_quantity: Decimal | None = None,
 ) -> Product | None:
     visibility = or_(Product.owner_id.is_(None), Product.owner_id == owner_id)
     if gtin:
@@ -48,7 +51,15 @@ def _find_product(
         )
         .order_by(ProductAlias.owner_id.desc())
     )
-    return alias.product if alias is not None else None
+    if alias is not None and alias.product is not None:
+        if (
+            package_quantity is not None
+            and alias.product.net_quantity is not None
+            and abs(alias.product.net_quantity - package_quantity) > package_quantity * Decimal("0.2")
+        ):
+            return None
+        return alias.product
+    return None
 
 
 def _load_receipt(session: Session, owner_id: uuid.UUID, receipt_id: uuid.UUID) -> Receipt:
@@ -101,7 +112,14 @@ def import_receipt(
     jobs_created = 0
     for position, item in enumerate(payload.items, start=1):
         normalized_name = normalize_product_name(item.name)
-        product = _find_product(session, owner_id, payload.merchant_inn, normalized_name, item.gtin)
+        product = _find_product(
+            session,
+            owner_id,
+            payload.merchant_inn,
+            normalized_name,
+            item.gtin,
+            package_quantity=item.package_quantity,
+        )
         line = ReceiptLine(
             owner_id=owner_id,
             receipt=receipt,

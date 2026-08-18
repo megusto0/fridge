@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     enrichment_hermes_fallback: bool = True
     enrichment_hermes_bin: str = "hermes"
     enrichment_hermes_timeout_seconds: float = 240.0
+    enrichment_max_attempts: int = 3
     naming_hermes_timeout_seconds: float = 90.0
 
     def resolve_hermes_bin(self) -> str:
