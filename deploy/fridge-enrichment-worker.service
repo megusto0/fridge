@@ -10,10 +10,10 @@ WorkingDirectory=/media/megusto/storage/fridge
 Environment=FRIDGE_AUTO_CREATE_SCHEMA=false
 Environment=PYTHONUNBUFFERED=1
 Environment=PATH=/home/megusto/.local/bin:/home/megusto/.cargo/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/media/megusto/storage/fridge/.venv/bin/fridge-enrichment-worker --poll-interval 60
-Restart=on-failure
+ExecStart=/media/megusto/storage/fridge/.venv/bin/fridge-enrichment-worker --poll-interval 30
+Restart=always
 RestartSec=10
-TimeoutStopSec=20
+TimeoutStopSec=300
 
 [Install]
 WantedBy=multi-user.target

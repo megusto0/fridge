@@ -7,6 +7,47 @@ ZERO = Decimal("0")
 HUNDRED = Decimal("100")
 
 
+_NON_FRIDGE_ITEM_RE = re.compile(
+    r"""
+    (?:^|\s)
+    (?:
+        доставка |
+        сборка(?:\s+и\s+упаковка)? |
+        пакет(?:-майка|ы|\s|$) |
+        батаре(?:йк|ек|я) |
+        губк[ауи] |
+        салфетк |
+        полотен[цч] |
+        туалетн\w*\s+бумаг |
+        бумажн\w*\s+полотен |
+        стакан\w*\s+одноразов |
+        одноразов |
+        зубн\w*\s+паст |
+        шампунь |
+        мыло |
+        стиральн |
+        чистящ |
+        средство\s+для |
+        наполнитель\s+для |
+        жевательн\w*\s+резинк |
+        жвачк |
+        резинка\s+жевательн |
+        вода(?:\s+\w+){0,3}\s+(?:минеральн|питьев|негазир) |
+        минеральн\w*\s+вода |
+        вода\s+мензелин
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def is_fridge_inventory_item(name: str, *, calculation_subject: str | None = None) -> bool:
+    """Return False for services, household goods, plain water, and gum."""
+    if calculation_subject and "УСЛУГА" in calculation_subject.upper():
+        return False
+    return _NON_FRIDGE_ITEM_RE.search(name) is None
+
+
 def normalize_product_name(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value).casefold().replace("ё", "е")
     normalized = re.sub(r"[^a-zа-я0-9%]+", " ", normalized)

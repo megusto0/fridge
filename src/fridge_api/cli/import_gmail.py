@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import uuid
+from pathlib import Path
 
 import httpx
 
@@ -20,7 +21,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("message_id", help="Himalaya message ID from the inbox")
     parser.add_argument(
         "--api-url",
-        default=os.getenv("FRIDGE_API_URL", "http://127.0.0.1:8000"),
+        default=os.getenv("FRIDGE_API_URL", "http://127.0.0.1:8011"),
         help="Fridge API base URL",
     )
     parser.add_argument("--owner-id", default=os.getenv("FRIDGE_OWNER_ID"))
@@ -52,6 +53,24 @@ def _fetch_message(himalaya_bin: str, message_id: str) -> bytes:
         error = exc.stderr.decode(errors="replace").strip()
         raise RuntimeError(f"Himalaya failed: {error or exc.returncode}") from exc
     return result.stdout
+
+
+def _ensure_worker() -> None:
+    fridge_root = Path("/media/megusto/storage/fridge")
+    worker = fridge_root / ".venv" / "bin" / "fridge-enrichment-worker"
+    active = subprocess.run(
+        ["systemctl", "is-active", "--quiet", "fridge-enrichment-worker.service"]
+    )
+    if active.returncode == 0 or not worker.is_file():
+        return
+    subprocess.Popen(
+        [str(worker), "--once", "--limit", "50"],
+        cwd=str(fridge_root),
+        start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+    )
 
 
 def _summary(payload: ReceiptImportRequest) -> dict[str, object]:
@@ -90,6 +109,8 @@ def main() -> None:
             with SessionLocal() as session:
                 imported = import_receipt(session, owner_id, payload)
             print(imported.model_dump_json(indent=2))
+            if imported.created or imported.enrichment_jobs_created:
+                _ensure_worker()
             return
         response = httpx.post(
             f"{args.api_url.rstrip('/')}/receipts/import-email",

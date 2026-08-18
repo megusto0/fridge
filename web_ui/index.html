@@ -559,6 +559,11 @@
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px">
           <sc-for list="{{ batches }}" as="b" hint-placeholder-count="2">
             <div onClick="{{ b.onOpen }}" role="button" tabIndex="0" style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;cursor:pointer;box-shadow:0 1px 3px rgba(26,25,23,0.04)">
+              <sc-if value="{{ b.hasImage }}" hint-placeholder-val="{{ false }}">
+                <div style="height:180px;background:#EDE8DF;overflow:hidden">
+                  <img src="{{ b.image_url }}" alt="{{ b.name }}" style="width:100%;height:100%;object-fit:cover;display:block" />
+                </div>
+              </sc-if>
               
               <div style="padding:16px;display:flex;flex-direction:column;gap:8px;flex:1">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
@@ -691,6 +696,12 @@
               </div>
               <button type="button" onClick="{{ onRenameBatch }}" style="background:transparent;border:1px solid #C9C4B7;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;color:#56534C;cursor:pointer;flex:none;white-space:nowrap" title="Изменить название милпрепа">✎ Название</button>
             </div>
+
+            <sc-if value="{{ batchHasImage }}" hint-placeholder-val="{{ false }}">
+              <div style="height:220px;margin-top:12px;background:#EDE8DF;border:1px solid #D5D0C5;border-radius:10px;overflow:hidden">
+                <img src="{{ batchImageUrl }}" alt="{{ batchSheetName }}" style="width:100%;height:100%;object-fit:cover;display:block" />
+              </div>
+            </sc-if>
 
             <div style="margin-top:12px;background:#EDE8DF;border:1px solid #D5D0C5;border-radius:10px;padding:12px">
               <div class="mono" style="font-size:16px;font-weight:700;color:#1E5B3C">{{ batchHeroDose }}</div>
@@ -902,23 +913,85 @@ class Component extends DCLogic {
     return '';
   }
 
+  apiFetch(path, options) {
+    const opts = options || {};
+    const headers = Object.assign({}, opts.headers || {});
+    if (this.ownerId && !headers['X-User-Id']) headers['X-User-Id'] = this.ownerId;
+    return fetch(this.apiBase + path, Object.assign({ credentials: 'include' }, opts, { headers }));
+  }
+
+  async loadDefaultOwner() {
+    const urls = [this.apiBase + '/fridge/config.json', 'config.json'];
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, { credentials: 'include' });
+        if (!res.ok) continue;
+        const cfg = await res.json();
+        if (cfg && cfg.owner_id) return String(cfg.owner_id).trim();
+      } catch (e) {}
+    }
+    return '';
+  }
+
   async initBackend() {
     this.apiBase = this.getApiBase();
+    this.demoCatalog = this.demoCatalog || this.cat.slice();
+    const defaultOwner = await this.loadDefaultOwner();
+    const saved = (localStorage.getItem('fridge_owner_id') || this.ownerId || '').trim();
+    this.ownerId = saved || defaultOwner;
+
     if (!this.ownerId) {
-      let saved = localStorage.getItem('fridge_owner_id');
-      if (!saved) {
-        saved = prompt('Введите ваш X-User-Id (UUID) для доступа к холодильнику:');
-        if (saved) {
-          saved = saved.trim();
-          localStorage.setItem('fridge_owner_id', saved);
-        }
-      }
-      this.ownerId = saved || '';
+      const typed = prompt('Введите ваш X-User-Id (UUID) для доступа к холодильнику:');
+      if (typed) this.ownerId = typed.trim();
     }
-    if (this.ownerId) {
-      await Promise.all([this.loadInventory(), this.loadBatches()]);
+
+    if (!this.ownerId) {
+      if (window.location.protocol !== 'file:') this.cat = [];
+      this.setState({ backendOnline: false, backendLoaded: true });
+      this.restoreDraft();
+      return;
+    }
+
+    let lots = null;
+    try {
+      lots = await this.fetchInventory(this.ownerId);
+    } catch (e) {
+      console.warn('Backend inventory fetch failed:', e);
+      lots = null;
+    }
+
+    if ((!lots || lots.length === 0) && defaultOwner && defaultOwner !== this.ownerId) {
+      try {
+        const retry = await this.fetchInventory(defaultOwner);
+        if (Array.isArray(retry) && retry.length > 0) {
+          lots = retry;
+          this.ownerId = defaultOwner;
+        }
+      } catch (e) {
+        console.warn('Default-owner inventory retry failed:', e);
+      }
+    }
+
+    if (lots) {
+      this.cat = lots.map(lot => this.mapBackendLot(lot));
+      localStorage.setItem('fridge_owner_id', this.ownerId);
+      this.setState({ stock: {}, backendOnline: true, backendLoaded: true });
+      await this.loadBatches();
+    } else {
+      if (window.location.protocol !== 'file:') this.cat = [];
+      this.setState({ backendOnline: false, backendLoaded: true });
     }
     this.restoreDraft();
+  }
+
+  async fetchInventory(ownerId) {
+    const res = await this.apiFetch('/inventory?include_empty=true', {
+      headers: { 'X-User-Id': ownerId, 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const lots = await res.json();
+    if (!Array.isArray(lots)) throw new Error('Unexpected inventory payload');
+    return lots;
   }
 
   openContextMenu(e, id) {
@@ -937,9 +1010,9 @@ class Component extends DCLogic {
     const count = items.length;
     let backendSuccess = false;
     try {
-      const res = await fetch(this.apiBase + '/inventory/consume', {
+      const res = await this.apiFetch('/inventory/consume', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-User-Id': this.ownerId },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items, reason })
       });
       if (res.ok) {
@@ -1024,20 +1097,13 @@ class Component extends DCLogic {
 
   async loadInventory() {
     try {
-      const res = await fetch(this.apiBase + '/inventory?include_empty=true', {
-        headers: { 'X-User-Id': this.ownerId, 'Content-Type': 'application/json' }
-      });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const lots = await res.json();
-      if (Array.isArray(lots) && lots.length > 0) {
-        this.cat = lots.map(lot => this.mapBackendLot(lot));
-        this.setState({ stock: {}, backendOnline: true, backendLoaded: true });
-      } else {
-        this.setState({ backendOnline: true });
-      }
+      const lots = await this.fetchInventory(this.ownerId);
+      this.cat = lots.map(lot => this.mapBackendLot(lot));
+      this.setState({ stock: {}, backendOnline: true, backendLoaded: true });
     } catch (e) {
-      console.warn('Backend inventory fetch failed, keeping local items:', e);
-      this.setState({ backendOnline: false });
+      console.warn('Backend inventory fetch failed:', e);
+      if (window.location.protocol !== 'file:') this.cat = [];
+      this.setState({ backendOnline: false, backendLoaded: true });
     }
   }
 
@@ -1049,9 +1115,7 @@ class Component extends DCLogic {
     } catch(e) {}
 
     try {
-      const res = await fetch(this.apiBase + '/meal-prep/batches', {
-        headers: { 'X-User-Id': this.ownerId }
-      });
+      const res = await this.apiFetch('/meal-prep/batches');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       if (Array.isArray(data)) {
@@ -1241,6 +1305,14 @@ class Component extends DCLogic {
   }
 
   mapBackendBatch(b) {
+    const rawImageUrl = b.image_url || '';
+    let imageUrl = rawImageUrl;
+    if (rawImageUrl && typeof window !== 'undefined' && window.location.protocol !== 'file:') {
+      try {
+        const parsed = new URL(rawImageUrl, window.location.href);
+        if (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost') imageUrl = parsed.pathname;
+      } catch (e) {}
+    }
     const containers = (b.containers || []).map((c, idx) => {
       const isConsumed = c.status === 'consumed' || (c.remaining_weight_g !== undefined && parseFloat(c.remaining_weight_g) <= 0);
       return {
@@ -1270,6 +1342,8 @@ class Component extends DCLogic {
     return {
       id: b.id,
       name: b.name,
+      image_url: imageUrl,
+      hasImage: Boolean(imageUrl),
       dateText: prepDate,
       status: b.status,
       totals,
@@ -1469,9 +1543,9 @@ class Component extends DCLogic {
           unit: s.p.unit === 'г' ? 'g' : (s.p.unit === 'мл' ? 'ml' : 'pcs')
         }))
       };
-      const res = await fetch(this.apiBase + '/meal-prep/batches', {
+      const res = await this.apiFetch('/meal-prep/batches', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-User-Id': this.ownerId },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       if (res.ok) {
@@ -1492,9 +1566,9 @@ class Component extends DCLogic {
     // Call backend name suggestion if batch ID is available
     if (c && c.backendBatchId) {
       try {
-        const res = await fetch(this.apiBase + '/meal-prep/batches/' + c.backendBatchId + '/suggest-name', {
+        const res = await this.apiFetch('/meal-prep/batches/' + c.backendBatchId + '/suggest-name', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-User-Id': this.ownerId },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mode: 'hermes' })
         });
         if (res.ok) {
@@ -1553,9 +1627,9 @@ class Component extends DCLogic {
             unit: s.p.unit === 'г' ? 'g' : (s.p.unit === 'мл' ? 'ml' : 'pcs')
           }))
         };
-        const res = await fetch(this.apiBase + '/meal-prep/batches', {
+        const res = await this.apiFetch('/meal-prep/batches', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-User-Id': this.ownerId },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
         if (res.ok) {
@@ -1571,9 +1645,9 @@ class Component extends DCLogic {
     if (batchId) {
       try {
         // 1. Update dish name with user's custom name
-        await fetch(this.apiBase + '/meal-prep/batches/' + batchId, {
+        await this.apiFetch('/meal-prep/batches/' + batchId, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', 'X-User-Id': this.ownerId },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: this.dishName(), name_source: 'user' })
         });
 
@@ -1587,16 +1661,15 @@ class Component extends DCLogic {
           portions: c.mode === 'custom' ? ws.map(w => ({ net_weight_g: w })) : [],
           tare_weight_g: 0
         };
-        await fetch(this.apiBase + '/meal-prep/batches/' + batchId + '/portions', {
+        await this.apiFetch('/meal-prep/batches/' + batchId + '/portions', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'X-User-Id': this.ownerId },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(portionPayload)
         });
 
         // 3. Finalize batch
-        await fetch(this.apiBase + '/meal-prep/batches/' + batchId + '/finalize', {
-          method: 'POST',
-          headers: { 'X-User-Id': this.ownerId }
+        await this.apiFetch('/meal-prep/batches/' + batchId + '/finalize', {
+          method: 'POST'
         });
       } catch (e) {
         console.warn('Backend save/finalize error:', e);
@@ -1634,9 +1707,8 @@ class Component extends DCLogic {
     const c = this.state.comp;
     if (c && c.backendBatchId) {
       try {
-        await fetch(this.apiBase + '/meal-prep/batches/' + c.backendBatchId + '/cancel', {
-          method: 'POST',
-          headers: { 'X-User-Id': this.ownerId }
+        await this.apiFetch('/meal-prep/batches/' + c.backendBatchId + '/cancel', {
+          method: 'POST'
         });
         await this.loadInventory();
       } catch (e) {
@@ -2192,6 +2264,8 @@ class Component extends DCLogic {
       v.isBatchSheet=true;
       const b=st.batches.find(x=>x.id===st.sheet.id);
       v.batchSheetName=b.name;
+      v.batchImageUrl=b.image_url||'';
+      v.batchHasImage=Boolean(v.batchImageUrl);
       v.batchSub=b.dateText+' · '+b.containers.length+' контейнеров';
       const onePortion=this.contNutriFor(b,{w:Math.round(b.totals.g/b.containers.length)});
       v.batchHeroDose='На 1 контейнер: У '+this.n1(onePortion.c)+' г · '+this.n0(onePortion.k)+' ккал';
@@ -2274,9 +2348,9 @@ class Component extends DCLogic {
           if(newName && b){
             if(b.id && !String(b.id).startsWith('b')){
               try {
-                await fetch(this.apiBase + '/meal-prep/batches/' + b.id, {
+                await this.apiFetch('/meal-prep/batches/' + b.id, {
                   method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json', 'X-User-Id': this.ownerId },
+                  headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ name: newName, name_source: 'user' })
                 });
               } catch(e) {
@@ -2308,9 +2382,9 @@ class Component extends DCLogic {
         v.onDlgConfirm=async ()=>{
           if (c2.id) {
             try {
-              const res = await fetch(this.apiBase + '/containers/' + c2.id + '/consume', {
+              const res = await this.apiFetch('/containers/' + c2.id + '/consume', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-User-Id': this.ownerId },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ consumed_weight_g: c2.w })
               });
               if (res.ok) {
@@ -2369,9 +2443,7 @@ class Component extends DCLogic {
   async openContainerLabel(b, c2) {
     if (c2.id) {
       try {
-        const res = await fetch(this.apiBase + '/containers/' + c2.id + '/label', {
-          headers: { 'X-User-Id': this.ownerId }
-        });
+        const res = await this.apiFetch('/containers/' + c2.id + '/label');
         if (res.ok) {
           const l = await res.json();
           this.setState({

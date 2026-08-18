@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import uuid
-from decimal import Decimal
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session, joinedload, sessionmaker
@@ -23,8 +25,13 @@ from fridge_api.services.enrichment.open_food_facts import (
     normalize_gtin,
 )
 from fridge_api.services.enrichment.reference_food import ReferenceFoodProvider
-from fridge_api.services.enrichment.types import EnrichmentResult, TemporaryEnrichmentError
-from fridge_api.services.enrichment.yandex_eda import YandexEdaProvider, YandexEdaMagnitProvider
+from fridge_api.services.enrichment.types import (
+    EnrichmentQuery,
+    EnrichmentResult,
+    TemporaryEnrichmentError,
+    is_placeholder_nutrition,
+)
+from fridge_api.services.enrichment.yandex_eda import YandexCard, YandexEdaProvider
 
 
 def _now() -> datetime:
@@ -71,12 +78,14 @@ class EnrichmentWorker:
         self.hermes = hermes
         if self.hermes is None and settings.enrichment_hermes_fallback:
             self.hermes = HermesResearchProvider(
-                executable=settings.enrichment_hermes_bin,
+                executable=settings.resolve_hermes_bin(),
                 timeout_seconds=settings.enrichment_hermes_timeout_seconds,
             )
 
     def close(self) -> None:
         self.open_food_facts.close()
+        if self.yandex_eda is not None:
+            self.yandex_eda.close()
 
     def recover_stale_jobs(self) -> int:
         stale_before = _now() - timedelta(minutes=15)
@@ -149,20 +158,23 @@ class EnrichmentWorker:
                 return
             line = job.receipt_line
             existing = self._find_existing(session, line)
-            if existing is not None:
+            if existing is not None and not self._is_placeholder(existing):
                 self._link(session, job, line, existing, provider="existing_product")
                 session.commit()
                 return
+            query = self._query_from_line(line)
+            existing_id = existing.id if existing is not None else None
+            session.expunge_all()
 
-            result = None
-            if self.yandex_eda is not None:
-                result = self.yandex_eda.lookup(line)
-            if result is None:
-                result = self.open_food_facts.lookup(line.gtin)
-            if result is None and self.reference_food is not None:
-                result = self.reference_food.lookup(line.raw_name, line.gtin)
-            if result is None and self.hermes is not None:
-                result = self.hermes.lookup(line)
+        result = self.resolve(query)
+
+        with self.session_factory() as session:
+            job = session.get(EnrichmentJob, job_id)
+            if job is None:
+                return
+            line = session.get(ReceiptLine, job.receipt_line_id)
+            if line is None:
+                return
             if result is None:
                 line.enrichment_status = EnrichmentStatus.AMBIGUOUS
                 job.status = EnrichmentJobStatus.FAILED
@@ -171,10 +183,105 @@ class EnrichmentWorker:
                 job.last_error = "No sufficiently confident product match"
                 session.commit()
                 return
-
-            product = self._upsert_product(session, line, result)
+            product = None
+            if existing_id is not None:
+                product = session.get(Product, existing_id)
+            if product is None:
+                product = self._upsert_product(session, line, result)
+            else:
+                self._apply_result(product, line, result)
+                self._ensure_alias(session, line, product)
             self._link(session, job, line, product, provider=result.provider, result=result)
             session.commit()
+
+    def _query_from_line(self, line: ReceiptLine) -> EnrichmentQuery:
+        return EnrichmentQuery(
+            raw_name=line.raw_name,
+            gtin=line.gtin,
+            package_quantity=line.package_quantity,
+            package_unit=line.package_unit,
+        )
+
+    def _is_placeholder(self, product: Product) -> bool:
+        return is_placeholder_nutrition(
+            product.kcal_per_100,
+            product.protein_per_100,
+            product.fat_per_100,
+            product.carbs_per_100,
+        )
+
+    def resolve(self, query: EnrichmentQuery) -> EnrichmentResult | None:
+        card: YandexCard | None = None
+        if self.yandex_eda is not None:
+            card = self.yandex_eda.lookup_card(query)
+            if card is not None and card.nutrients is not None:
+                return self.yandex_eda._to_result(query, card)
+        result = self.open_food_facts.lookup(query.gtin)
+        if result is None and self.reference_food is not None:
+            result = self.reference_food.lookup(query.raw_name, query.gtin)
+        if result is None and self.hermes is not None:
+            result = self.hermes.lookup(query)
+        if result is None:
+            return None
+        if card is not None and card.image_url and not result.image_url:
+            result = replace(
+                result,
+                image_url=card.image_url,
+                image_source_url=card.image_url,
+            )
+        return result
+
+    def reprocess_placeholders(self, *, limit: int = 100) -> list[dict[str, object]]:
+        with self.session_factory() as session:
+            products = list(session.scalars(select(Product).order_by(Product.canonical_name)))
+            targets: dict[str, list[uuid.UUID]] = {}
+            names: dict[str, Product] = {}
+            for product in products:
+                if not self._is_placeholder(product):
+                    continue
+                targets.setdefault(product.canonical_name, []).append(product.id)
+                names.setdefault(product.canonical_name, product)
+
+        report: list[dict[str, object]] = []
+        for name, product_ids in list(targets.items())[:limit]:
+            sample = names[name]
+            query = EnrichmentQuery(
+                raw_name=sample.canonical_name,
+                gtin=sample.gtin,
+                package_quantity=sample.net_quantity,
+                package_unit=sample.net_unit,
+            )
+            try:
+                result = self.resolve(query)
+                error = None
+            except TemporaryEnrichmentError as exc:
+                result = None
+                error = str(exc)
+            updated = 0
+            if result is not None:
+                with self.session_factory() as session:
+                    for product_id in product_ids:
+                        product = session.get(Product, product_id)
+                        if product is None:
+                            continue
+                        self._apply_result(product, None, result)
+                        updated += 1
+                        for line in session.scalars(
+                            select(ReceiptLine).where(ReceiptLine.product_id == product_id)
+                        ):
+                            line.enrichment_status = product.nutrition_status
+                    session.commit()
+            row = {
+                "name": name,
+                "ids": len(product_ids),
+                "updated": updated,
+                "provider": result.provider if result else None,
+                "kcal_per_100": str(result.kcal_per_100) if result else None,
+                "error": error,
+            }
+            print(json.dumps(row, ensure_ascii=False), flush=True)
+            report.append(row)
+        return report
 
     def _find_existing(self, session: Session, line: ReceiptLine) -> Product | None:
         if line.product_id:
@@ -197,7 +304,8 @@ class EnrichmentWorker:
             if (
                 line.package_quantity is not None
                 and alias.product.net_quantity is not None
-                and abs(alias.product.net_quantity - line.package_quantity) > line.package_quantity * Decimal("0.2")
+                and abs(alias.product.net_quantity - line.package_quantity)
+                > line.package_quantity * Decimal("0.2")
             ):
                 return None
             return alias.product
@@ -212,54 +320,64 @@ class EnrichmentWorker:
             product = session.scalar(
                 select(Product).where(Product.owner_id == line.owner_id, Product.gtin == gtin)
             )
-        status = EnrichmentStatus.VERIFIED if result.verified else EnrichmentStatus.ESTIMATED
-        
-        # Determine actual net quantity: prefer receipt package size if search result diverges by >20%
-        final_net_qty = result.net_quantity or line.package_quantity
-        if (
-            line.package_quantity is not None
-            and result.net_quantity is not None
-            and abs(result.net_quantity - line.package_quantity) > line.package_quantity * Decimal("0.2")
-        ):
-            final_net_qty = line.package_quantity
-
         if product is None:
             product = Product(
                 owner_id=line.owner_id,
                 canonical_name=result.canonical_name,
-                brand=result.brand,
                 gtin=gtin,
-                net_quantity=final_net_qty,
-                net_unit=_unit(result.net_unit or line.package_unit),
-                kcal_per_100=result.kcal_per_100,
-                protein_per_100=result.protein_per_100,
-                fat_per_100=result.fat_per_100,
-                carbs_per_100=result.carbs_per_100,
-                nutrition_status=status,
-                confidence=result.confidence,
-                image_url=result.image_url,
-                piece_weight_g=result.piece_weight_g or final_net_qty,
-                nutrition_source_url=result.nutrition_source_url,
-                image_source_url=result.image_source_url,
             )
             session.add(product)
             session.flush()
-        elif product.nutrition_status != EnrichmentStatus.VERIFIED or result.verified:
-            product.canonical_name = result.canonical_name
-            product.brand = result.brand or product.brand
-            product.net_quantity = final_net_qty or product.net_quantity
-            product.net_unit = _unit(result.net_unit) or product.net_unit
-            product.piece_weight_g = result.piece_weight_g or final_net_qty or product.piece_weight_g
-            product.kcal_per_100 = result.kcal_per_100
-            product.protein_per_100 = result.protein_per_100
-            product.fat_per_100 = result.fat_per_100
-            product.carbs_per_100 = result.carbs_per_100
-            product.nutrition_status = status
-            product.confidence = result.confidence
-            product.image_url = result.image_url or product.image_url
-            product.nutrition_source_url = result.nutrition_source_url
-            product.image_source_url = result.image_source_url or product.image_source_url
+        should_apply = (
+            product.nutrition_status != EnrichmentStatus.VERIFIED
+            or result.verified
+            or self._is_placeholder(product)
+        )
+        if should_apply:
+            self._apply_result(product, line, result)
+        self._ensure_alias(session, line, product)
+        return product
 
+    def _apply_result(
+        self, product: Product, line: ReceiptLine | None, result: EnrichmentResult
+    ) -> None:
+        status = EnrichmentStatus.VERIFIED if result.verified else EnrichmentStatus.ESTIMATED
+        final_net_qty = result.net_quantity
+        line_unit = None
+        if line is not None:
+            final_net_qty = result.net_quantity or line.package_quantity
+            line_unit = line.package_unit
+            if (
+                line.package_quantity is not None
+                and result.net_quantity is not None
+                and abs(result.net_quantity - line.package_quantity)
+                > line.package_quantity * Decimal("0.2")
+            ):
+                final_net_qty = line.package_quantity
+        product.canonical_name = result.canonical_name
+        product.brand = result.brand or product.brand
+        product.net_quantity = final_net_qty or product.net_quantity
+        product.net_unit = _unit(result.net_unit) or _unit(line_unit) or product.net_unit
+        product.piece_weight_g = result.piece_weight_g or product.piece_weight_g
+        product.kcal_per_100 = result.kcal_per_100
+        product.protein_per_100 = result.protein_per_100
+        product.fat_per_100 = result.fat_per_100
+        product.carbs_per_100 = result.carbs_per_100
+        product.nutrition_status = status
+        product.confidence = result.confidence
+        incoming_image = result.image_url or ""
+        current_image = product.image_url or ""
+        if "get-eda" in incoming_image and "get-eda" not in current_image:
+            product.image_url = result.image_url
+            product.image_source_url = result.image_source_url or result.image_url
+        elif not current_image:
+            product.image_url = result.image_url
+            product.image_source_url = result.image_source_url
+        product.nutrition_source_url = result.nutrition_source_url
+        if not product.image_source_url:
+            product.image_source_url = result.image_source_url
+
+    def _ensure_alias(self, session: Session, line: ReceiptLine, product: Product) -> None:
         alias = session.scalar(
             select(ProductAlias).where(
                 ProductAlias.owner_id == line.owner_id,
@@ -277,7 +395,6 @@ class EnrichmentWorker:
                     normalized_name=line.normalized_name,
                 )
             )
-        return product
 
     def _link(
         self,

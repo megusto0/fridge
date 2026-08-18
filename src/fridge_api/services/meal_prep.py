@@ -225,6 +225,9 @@ def update_batch(
     values = payload.model_dump(exclude_unset=True)
     for key, value in values.items():
         setattr(batch, key, value)
+    if "image_url" in values:
+        for container in batch.containers:
+            container.image_url = values["image_url"]
     session.commit()
     return get_batch(session, owner_id, batch.id)
 

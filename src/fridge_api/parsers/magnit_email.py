@@ -10,6 +10,7 @@ from email.parser import BytesParser
 from html.parser import HTMLParser
 from zoneinfo import ZoneInfo
 
+from fridge_api.domain import is_fridge_inventory_item
 from fridge_api.models import ReceiptOperation
 from fridge_api.schemas import ReceiptImportRequest, ReceiptItemInput
 
@@ -28,12 +29,6 @@ _MULTIPACK_RE = re.compile(
     r"(?P<quantity>\d+(?:[.,]\d+)?)\s*(?P<unit>кг|г|мл|л)(?![а-я])",
     re.IGNORECASE,
 )
-_NON_INVENTORY_NAME_RE = re.compile(
-    r"(?:^|\s)(?:доставка|сборка(?:\s+и\s+упаковка)?|пакет(?:-|\s|$)|пакет-майка)",
-    re.IGNORECASE,
-)
-
-
 class MagnitReceiptParseError(ValueError):
     """Raised when a message is not a supported, complete Magnit receipt."""
 
@@ -88,9 +83,9 @@ class _ParsedLine:
 
     @property
     def inventory_effect(self) -> bool:
-        if self.calculation_subject and "УСЛУГА" in self.calculation_subject.upper():
-            return False
-        return _NON_INVENTORY_NAME_RE.search(self.name) is None
+        return is_fridge_inventory_item(
+            self.name, calculation_subject=self.calculation_subject
+        )
 
 
 def _money_to_minor(value: Decimal) -> int:

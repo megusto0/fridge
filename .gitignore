@@ -12,4 +12,6 @@ dist/
 .gradle/
 .DS_Store
 *.zip
+*.apk
+web_ui/config.json
 

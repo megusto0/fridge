@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from fridge_api.domain import normalize_product_name
+from fridge_api.domain import is_fridge_inventory_item, normalize_product_name
 from fridge_api.models import (
     EnrichmentJob,
     EnrichmentJobStatus,
@@ -112,6 +112,7 @@ def import_receipt(
     jobs_created = 0
     for position, item in enumerate(payload.items, start=1):
         normalized_name = normalize_product_name(item.name)
+        inventory_effect = bool(item.inventory_effect) and is_fridge_inventory_item(item.name)
         product = _find_product(
             session,
             owner_id,
@@ -133,14 +134,14 @@ def import_receipt(
             gtin=item.gtin,
             package_quantity=item.package_quantity,
             package_unit=item.package_unit,
-            inventory_effect=item.inventory_effect,
+            inventory_effect=inventory_effect,
             product_id=product.id if product else None,
             enrichment_status=(product.nutrition_status if product else EnrichmentStatus.PENDING),
         )
         session.add(line)
         session.flush()
 
-        if payload.operation == ReceiptOperation.SALE and item.inventory_effect:
+        if payload.operation == ReceiptOperation.SALE and inventory_effect:
             lot = InventoryLot(
                 owner_id=owner_id,
                 product_id=product.id if product else None,
@@ -167,7 +168,7 @@ def import_receipt(
             )
             lots_created += 1
 
-        if product is None and item.inventory_effect:
+        if product is None and inventory_effect:
             session.add(
                 EnrichmentJob(
                     owner_id=owner_id,

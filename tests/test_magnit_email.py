@@ -75,7 +75,7 @@ def test_parser_aggregates_marked_items_and_classifies_inventory() -> None:
     assert water.package_quantity == Decimal("1.5")
     assert water.package_unit == "л"
     assert water.total_minor == 6872
-    assert water.inventory_effect is True
+    assert water.inventory_effect is False
 
     onion = payload.items[1]
     assert onion.quantity == Decimal("0.46")
@@ -96,15 +96,15 @@ def test_import_email_preserves_non_inventory_lines_without_creating_lots(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["created"] is True
-    assert body["inventory_lots_created"] == 2
-    assert body["enrichment_jobs_created"] == 2
+    assert body["inventory_lots_created"] == 1
+    assert body["enrichment_jobs_created"] == 1
     assert len(body["receipt"]["lines"]) == 4
-    assert sum(line["inventory_effect"] for line in body["receipt"]["lines"]) == 2
+    assert sum(line["inventory_effect"] for line in body["receipt"]["lines"]) == 1
 
     inventory = client.get("/inventory", headers=owner_headers).json()
-    assert len(inventory) == 2
+    assert len(inventory) == 1
     by_name = {lot["display_name"]: lot for lot in inventory}
-    assert Decimal(by_name["Вода Мензелинская минеральная 1.5л"]["original_quantity"]) == 2
+    assert "Вода Мензелинская минеральная 1.5л" not in by_name
     assert Decimal(by_name["Лук красный"]["original_quantity"]) == Decimal("0.46")
 
     duplicate = client.post(
