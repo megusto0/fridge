@@ -849,7 +849,7 @@
 
 <script type="text/x-dc" data-dc-script data-props='{"demoState":{"editor":"select","options":["нет","пустой холодильник","скелетоны","ошибка фото","ошибка печати","ошибка сохранения"],"value":"нет"}}'>
 class Component extends DCLogic {
-  ownerId = new URLSearchParams(window.location.search).get('user_id') || localStorage.getItem('fridge_owner_id') || 'f51669a5-b262-475b-979c-4da82b072266';
+  ownerId = localStorage.getItem('fridge_owner_id') || '';
   apiBase = '';
 
   cat = [
@@ -904,7 +904,20 @@ class Component extends DCLogic {
 
   async initBackend() {
     this.apiBase = this.getApiBase();
-    await Promise.all([this.loadInventory(), this.loadBatches()]);
+    if (!this.ownerId) {
+      let saved = localStorage.getItem('fridge_owner_id');
+      if (!saved) {
+        saved = prompt('Введите ваш X-User-Id (UUID) для доступа к холодильнику:');
+        if (saved) {
+          saved = saved.trim();
+          localStorage.setItem('fridge_owner_id', saved);
+        }
+      }
+      this.ownerId = saved || '';
+    }
+    if (this.ownerId) {
+      await Promise.all([this.loadInventory(), this.loadBatches()]);
+    }
     this.restoreDraft();
   }
 
