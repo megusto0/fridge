@@ -708,6 +708,18 @@
               <div class="mono" style="font-size:12.5px;color:#56534C;margin-top:2px">{{ batchTotals }}</div>
             </div>
 
+            <sc-if value="{{ hasBatchIngredients }}" hint-placeholder-val="{{ true }}">
+              <div style="font-size:13px;font-weight:600;margin:16px 0 8px">Состав партии:</div>
+              <div style="display:flex;flex-direction:column;gap:7px;background:#EDE8DF;border:1px solid #D5D0C5;border-radius:10px;padding:10px 14px">
+                <sc-for list="{{ batchIngredients }}" as="i" hint-placeholder-count="4">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;font-size:13px" class="mono">
+                    <span style="color:#1A1917;line-height:1.35">{{ i.name }}</span>
+                    <span style="font-weight:600;white-space:nowrap;flex:none;color:#1A1917">{{ i.amount }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+
             <div style="font-size:13px;font-weight:600;margin:16px 0 8px">Контейнеры партии:</div>
             <div style="display:flex;flex-direction:column;gap:8px">
               <sc-for list="{{ batchContainers }}" as="c" hint-placeholder-count="4">
@@ -1330,11 +1342,11 @@ class Component extends DCLogic {
     });
     
     const totals = {
-      g: parseFloat(b.cooked_yield_g) || (containers.reduce((a, x) => a + x.w, 0)),
-      k: parseFloat(b.total_kcal) || 0,
-      p: parseFloat(b.total_protein) || 0,
-      f: parseFloat(b.total_fat) || 0,
-      c: parseFloat(b.total_carbs) || 0
+      g: parseFloat(b.cooked_yield_g) || parseFloat(b.total_net_weight_g) || (containers.reduce((a, x) => a + x.w, 0)),
+      k: parseFloat(b.kcal_total != null ? b.kcal_total : b.total_kcal) || 0,
+      p: parseFloat(b.protein_total != null ? b.protein_total : b.total_protein) || 0,
+      f: parseFloat(b.fat_total != null ? b.fat_total : b.total_fat) || 0,
+      c: parseFloat(b.carbs_total != null ? b.carbs_total : b.total_carbs) || 0
     };
     
     const prepDate = b.created_at ? 'приготовлено ' + new Date(b.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : 'приготовлено сегодня';
@@ -1347,7 +1359,10 @@ class Component extends DCLogic {
       dateText: prepDate,
       status: b.status,
       totals,
-      ing: (b.ingredients || []).map(i => ({ name: i.display_name, amount: i.quantity + ' ' + (i.unit === 'g' ? 'г' : i.unit) })),
+      ing: (b.ingredients || []).map(i => ({
+        name: i.display_name,
+        amount: this.formatQty(i.quantity) + ' ' + this.formatUnit(i.unit)
+      })),
       containers
     };
   }
@@ -1357,6 +1372,20 @@ class Component extends DCLogic {
   grams(p,amt){ return amt*this.unitG(p); }
   n1(x){ const v=Math.round(x*10)/10; return String(v).replace('.',','); }
   n0(x){ return String(Math.round(x)); }
+  formatQty(x){
+    const n=parseFloat(x);
+    if(!isFinite(n)) return String(x||'');
+    return Math.abs(n-Math.round(n))<0.05 ? this.n0(n) : this.n1(n);
+  }
+  formatUnit(u){
+    const x=String(u||'').toLowerCase();
+    if(x==='g'||x==='г') return 'г';
+    if(x==='ml'||x==='мл') return 'мл';
+    if(x==='kg'||x==='кг') return 'кг';
+    if(x==='l'||x==='л') return 'л';
+    if(x==='pcs'||x==='шт'||x==='pack'||x==='уп') return 'шт';
+    return u||'';
+  }
   plural(n,forms){ const a=Math.abs(Math.round(n))%100, b=a%10;
     if(a>10&&a<20) return forms[2];
     if(b>1&&b<5) return forms[1];
@@ -2270,6 +2299,8 @@ class Component extends DCLogic {
       const onePortion=this.contNutriFor(b,{w:Math.round(b.totals.g/b.containers.length)});
       v.batchHeroDose='На 1 контейнер: У '+this.n1(onePortion.c)+' г · '+this.n0(onePortion.k)+' ккал';
       v.batchTotals='Итог партии: '+this.n0(b.totals.g)+' г · '+this.n0(b.totals.k)+' ккал';
+      v.batchIngredients=b.ing || [];
+      v.hasBatchIngredients=v.batchIngredients.length > 0;
       v.batchContainers=b.containers.map((c2,idx)=>({
         title:'Контейнер '+c2.n+' ('+this.n0(c2.w)+' г)',
         meta:c2.left<=0?'съеден':(c2.left<1?'осталась половина':'полный'),
