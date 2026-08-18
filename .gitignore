@@ -1,0 +1,15 @@
+.env
+.pytest_cache/
+.ruff_cache/
+.venv/
+.uv-cache/
+__pycache__/
+*.db
+*.sqlite*
+data/
+dist/
+*.egg-info/
+.gradle/
+.DS_Store
+*.zip
+

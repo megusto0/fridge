@@ -1,0 +1,2374 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Холодильник</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Literata:opsz,wght@7..72,400;7..72,500;7..72,600;7..72,700&display=swap&subset=cyrillic" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#E7E4DC;color:#1A1917;font-family:'IBM Plex Sans',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:#1E5B3C;text-decoration:none}
+  a:hover{color:#154529;text-decoration:underline}
+  input,button,textarea,select{font:inherit;color:inherit}
+  button:focus-visible,input:focus-visible{outline:2px solid #1E5B3C;outline-offset:2px}
+  ::selection{background:#D3DEC9}
+  .mono{font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace}
+  .serif{font-family:'Literata',Georgia,serif}
+  @keyframes shimmer{0%{opacity:.45}50%{opacity:.9}100%{opacity:.45}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes fill{from{width:6%}to{width:94%}}
+  @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important}}
+</style>
+</helmet>
+
+<div style="min-height:100vh;display:flex;flex-direction:column;background:#E7E4DC;color:#1A1917">
+
+  <!-- ==================== TOP NAVIGATION ==================== -->
+  <div style="position:sticky;top:0;z-index:40;background:rgba(231,228,220,0.96);backdrop-filter:blur(10px);border-bottom:1px solid #D5D0C5">
+    <div style="max-width:1120px;margin:0 auto;padding:10px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      
+      <!-- Brand Logo -->
+      <div style="display:flex;align-items:center;gap:10px;min-width:0">
+        <div style="width:22px;height:22px;border-radius:6px;background:#1E5B3C;display:flex;align-items:center;justify-content:center;color:#FAF9F5;font-size:12px;font-weight:700;flex:none">Х</div>
+        <div class="serif" style="font-size:17px;font-weight:600;white-space:nowrap;letter-spacing:-0.01em">Холодильник</div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div style="display:flex;gap:4px;background:#DDD9CF;padding:3px;border-radius:12px">
+        <button type="button" onClick="{{ onFridge }}" style="{{ navFridgeS }}">Холодильник</button>
+        <button type="button" onClick="{{ onPreps }}" style="{{ navPrepsS }}">Милпрепы</button>
+        <button type="button" onClick="{{ onAdd }}" style="{{ navAddS }}">＋ Добавить</button>
+      </div>
+
+      <!-- Backend Connection Status Indicator -->
+      <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#56534C;background:#EDE8DF;border:1px solid #D5D0C5;border-radius:20px;padding:3px 10px;cursor:pointer" title="Нажмите для обновления данных из API" onClick="{{ onRefreshBackend }}">
+        <div style="{{ backendDotS }}"></div>
+        <span class="mono">{{ backendStatusText }}</span>
+      </div>
+
+      <!-- Reconciled Header Product Counter -->
+      <div class="mono" style="margin-left:auto;font-size:12.5px;color:#56534C;white-space:nowrap">{{ headerCount }}</div>
+    </div>
+  </div>
+
+  <!-- ==================== SCREEN 1: ХОЛОДИЛЬНИК ==================== -->
+  <sc-if value="{{ isFridge }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1;max-width:1120px;width:100%;margin:0 auto;padding:24px 24px 44px">
+      
+      <!-- Header row: title and primary action -->
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+        <div>
+          <div class="serif" style="font-size:28px;font-weight:600;line-height:1.15;color:#1A1917">Запасы продуктов</div>
+          <div class="mono" style="font-size:13px;color:#56534C;margin-top:4px">{{ subCount }}</div>
+        </div>
+        <button type="button" onClick="{{ onCook }}" disabled="{{ createDisabled }}" style="{{ createS }}">
+          <span>Создать милпреп</span>
+          <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+            <span class="mono" style="font-size:13px;opacity:.9">({{ selCountText }})</span>
+          </sc-if>
+        </button>
+      </div>
+
+      <!-- Search & Category Filters -->
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px">
+        <div style="display:flex;align-items:center;gap:10px;background:#FAF9F5;border:1px solid #D5D0C5;border-radius:12px;padding:0 14px;height:46px">
+          <div style="width:14px;height:14px;border:2px solid #8A857B;border-radius:50%;flex:none"></div>
+          <input type="search" value="{{ q }}" onChange="{{ onQuery }}" placeholder="Найти в запасах…" aria-label="Найти в запасах" style="flex:1;border:none;background:transparent;font-size:14.5px;height:44px;outline:none;color:#1A1917" />
+          <sc-if value="{{ hasQuery }}" hint-placeholder-val="{{ false }}">
+            <button type="button" onClick="{{ onClearQuery }}" style="background:transparent;border:none;cursor:pointer;color:#56534C;font-size:13px;padding:6px 8px">Сбросить</button>
+          </sc-if>
+        </div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <sc-for list="{{ chips }}" as="chip" hint-placeholder-count="6">
+            <button type="button" onClick="{{ chip.on }}" style="{{ chip.s }}">{{ chip.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- Skeletons State -->
+      <sc-if value="{{ showSkeletons }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ skeletons }}" as="sk" hint-placeholder-count="4">
+            <div style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:12px;padding:12px 16px;height:60px;animation:shimmer 1.6s ease-in-out infinite"></div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- Empty State -->
+      <sc-if value="{{ showEmptyFridge }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#FAF9F5;border:1px dashed #C9C4B7;border-radius:16px;padding:48px 24px;text-align:center">
+          <div class="serif" style="font-size:22px;font-weight:600">Холодильник пуст</div>
+          <div style="font-size:14px;color:#56534C;margin-top:6px;max-width:380px;margin-left:auto;margin-right:auto">Отсканируйте QR чека или добавьте продукты вручную.</div>
+          <button type="button" onClick="{{ onAdd }}" style="background:#1E5B3C;color:#FAF9F5;border:none;border-radius:10px;padding:12px 22px;font-weight:600;font-size:15px;cursor:pointer;margin-top:18px;min-height:44px">Добавить чек</button>
+        </div>
+      </sc-if>
+
+      <!-- No Results State -->
+      <sc-if value="{{ showNoResults }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:16px;padding:36px 24px;text-align:center">
+          <div style="font-size:16px;font-weight:600">Ничего не найдено</div>
+          <div style="font-size:13.5px;color:#56534C;margin-top:4px">Попробуйте другое слово или сбросьте фильтры.</div>
+          <button type="button" onClick="{{ onResetFilters }}" style="background:transparent;border:1px solid #C9C4B7;border-radius:10px;padding:10px 16px;font-weight:500;cursor:pointer;margin-top:14px;font-size:13.5px">Сбросить фильтры</button>
+        </div>
+      </sc-if>
+
+      <!-- DENSE GROUPED PRODUCT LIST -->
+      <sc-if value="{{ showGrid }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:20px">
+          <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              
+              <!-- Group Section Header -->
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div style="{{ g.indicatorDotS }}"></div>
+                  <div class="serif" style="font-size:15px;font-weight:600;color:#1A1917">{{ g.title }}</div>
+                  <span class="mono" style="font-size:12px;color:#8A857B">({{ g.count }})</span>
+                </div>
+                <div class="mono" style="font-size:11px;color:#8A857B;letter-spacing:0.02em">БЖУ НА 100 Г</div>
+              </div>
+
+              <!-- Group Items Table / Stack -->
+              <div style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(26,25,23,0.04)">
+                <sc-for list="{{ g.items }}" as="p" hint-placeholder-count="4">
+                  <div style="{{ p.rowS }}" onClick="{{ p.onRowClick }}" onContextMenu="{{ p.onContextMenu }}" onKeyDown="{{ p.onKey }}" role="button" tabIndex="0" aria-label="{{ p.rowAria }}">
+                    
+                    <!-- Selection Indicator (Contour + Checkmark, no background fill!) -->
+                    <div style="{{ p.checkS }}" onClick="{{ p.onToggle }}" title="Выбрать для милпрепа">
+                      <sc-if value="{{ p.selected }}" hint-placeholder-val="{{ true }}">
+                        <span style="font-size:12px;font-weight:700;line-height:1">✓</span>
+                      </sc-if>
+                    </div>
+
+                    <!-- 40px Clean Thumbnail with Real Product Photo -->
+                    <div style="{{ p.thumbS }}">
+                      <sc-if value="{{ p.hasImage }}" hint-placeholder-val="{{ true }}">
+                        <img src="{{ p.image_url }}" alt="{{ p.name }}" style="width:100%;height:100%;object-fit:cover;border-radius:7px;display:block" />
+                      </sc-if>
+                      <sc-if value="{{ p.noImage }}" hint-placeholder-val="{{ false }}">
+                        <span style="font-size:18px;line-height:1">{{ p.icon }}</span>
+                      </sc-if>
+                    </div>
+
+                    <!-- Main Info Column: Title & Subtitle -->
+                    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                      <div style="font-size:14px;font-weight:600;line-height:1.3;color:#1A1917;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.name }}</div>
+                      <div style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:#56534C">
+                        <span class="mono">{{ p.lotMeta }}</span>
+                        <sc-if value="{{ p.isEstimated }}" hint-placeholder-val="{{ false }}">
+                          <span style="color:#9A7B33;font-size:11.5px" title="БЖУ рассчитано автоматически">≈ оценка</span>
+                        </sc-if>
+                        <sc-if value="{{ p.isPending }}" hint-placeholder-val="{{ false }}">
+                          <span style="color:#A8624E;font-size:11.5px">… без БЖУ</span>
+                        </sc-if>
+                      </div>
+                    </div>
+
+                    <!-- Macros Column (Clean IBM Plex Mono) -->
+                    <div class="mono" style="text-align:right;min-width:140px;display:flex;flex-direction:column;gap:2px;align-items:flex-end">
+                      <div style="font-size:13px;font-weight:500;color:#1A1917">{{ p.nutriKcal }}</div>
+                      <div style="font-size:11.5px;color:#56534C">{{ p.nutriPfc }}</div>
+                    </div>
+
+                    <!-- Stock Amount & Expiry Column -->
+                    <div class="mono" style="text-align:right;min-width:110px;display:flex;flex-direction:column;gap:2px;align-items:flex-end">
+                      <div style="font-size:13.5px;font-weight:600;color:#1A1917">{{ p.availText }}</div>
+                      <span style="{{ p.expS }}">{{ p.expText }}</span>
+                    </div>
+
+                    <!-- Row Actions -->
+                    <div style="display:flex;align-items:center;gap:6px;margin-left:4px" onClick="{{ stop }}">
+                      <sc-if value="{{ p.selected }}" hint-placeholder-val="{{ false }}">
+                        <button type="button" onClick="{{ p.onOpenAmount }}" style="background:#EAE6DD;border:1px solid #D5D0C5;border-radius:8px;padding:5px 9px;font-size:12px;font-weight:600;cursor:pointer" title="Изменить количество">
+                          <span class="mono">{{ p.selAmtText }}</span> ✎
+                        </button>
+                      </sc-if>
+                      <button type="button" onClick="{{ p.onDetail }}" style="background:transparent;border:none;cursor:pointer;color:#8A857B;padding:6px;font-size:14px;border-radius:6px" title="Карточка продукта">ⓘ</button>
+                    </div>
+
+                  </div>
+                </sc-for>
+              </div>
+
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+    </div>
+
+    <!-- Sticky Bottom Tray (When items are selected) -->
+    <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+      <div style="position:sticky;bottom:0;z-index:35;background:rgba(250,249,245,0.97);backdrop-filter:blur(10px);border-top:1px solid #D5D0C5;box-shadow:0 -4px 20px rgba(26,25,23,0.08)">
+        <div style="max-width:1120px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="display:flex;gap:5px;align-items:center">
+            <sc-for list="{{ trayIcons }}" as="ti" hint-placeholder-count="4">
+              <div style="width:34px;height:34px;border-radius:8px;background:#EDE8DF;border:1px solid #D5D0C5;display:flex;align-items:center;justify-content:center;font-size:15px;overflow:hidden;flex:none">
+                <sc-if value="{{ ti.hasImage }}" hint-placeholder-val="{{ true }}">
+                  <img src="{{ ti.image_url }}" alt="item" style="width:100%;height:100%;object-fit:cover;display:block" />
+                </sc-if>
+                <sc-if value="{{ ti.noImage }}" hint-placeholder-val="{{ false }}">
+                  <span>{{ ti.icon }}</span>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="min-width:0;flex:1">
+            <div style="font-size:14px;font-weight:600;color:#1A1917">{{ trayCount }}</div>
+            <div class="mono" style="font-size:12.5px;color:#56534C;margin-top:2px">{{ trayLine }}</div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <button type="button" onClick="{{ onClearSel }}" style="background:transparent;border:1px solid #C9C4B7;border-radius:10px;padding:10px 16px;font-weight:500;cursor:pointer;font-size:14px;color:#56534C">Очистить</button>
+            <button type="button" onClick="{{ onConsumeSel }}" style="background:#56534C;color:#FAF9F5;border:none;border-radius:10px;padding:11px 18px;font-weight:600;font-size:14.5px;cursor:pointer;display:flex;align-items:center;gap:6px" title="Отметить выбранные продукты как съеденные">
+              <span>🍽 Съедено ({{ selCount }})</span>
+            </button>
+            <button type="button" onClick="{{ onCook }}" style="background:#1E5B3C;color:#FAF9F5;border:none;border-radius:10px;padding:11px 22px;font-weight:600;font-size:15px;cursor:pointer;display:flex;align-items:center;gap:6px">
+              <span>Готовить →</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+  </sc-if>
+
+  <!-- ==================== SCREEN 2: COMPOSER (МИЛПРЕП WIZARD) ==================== -->
+  <sc-if value="{{ isComposer }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;max-width:1120px;width:100%;margin:0 auto;padding:22px 24px 44px">
+      
+      <!-- Wizard Navigation Bar -->
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px">
+        <button type="button" onClick="{{ onExitComposer }}" style="background:transparent;border:1px solid #C9C4B7;border-radius:10px;padding:8px 14px;cursor:pointer;font-weight:500;font-size:13.5px">← В холодильник</button>
+        <div class="serif" style="font-size:24px;font-weight:600">Новый милпреп</div>
+        <span class="mono" style="margin-left:auto;font-size:11.5px;color:#56534C;background:#DDD9CF;border-radius:999px;padding:5px 12px">Черновик в API</span>
+      </div>
+
+      <!-- Step Indicator Bar -->
+      <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+        <sc-for list="{{ steps }}" as="st" hint-placeholder-count="4">
+          <button type="button" onClick="{{ st.on }}" style="{{ st.s }}">
+            <span class="mono" style="font-size:12px;opacity:.8">{{ st.n }}</span>
+            <span>{{ st.label }}</span>
+          </button>
+        </sc-for>
+      </div>
+
+      <!-- Two-column Composer Layout -->
+      <div style="display:grid;grid-template-columns:minmax(0,1.35fr) minmax(310px,0.65fr);gap:20px;align-items:start">
+        
+        <!-- Left Flow Content -->
+        <div style="display:flex;flex-direction:column;gap:16px">
+
+          <!-- STEP 1: ИНГРЕДИЕНТЫ -->
+          <sc-if value="{{ step1 }}" hint-placeholder-val="{{ true }}">
+            <div style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:14px;padding:18px">
+              <div class="serif" style="font-size:18px;font-weight:600;margin-bottom:4px">Выбранные ингредиенты</div>
+              <div style="font-size:13px;color:#56534C;margin-bottom:14px">Количество можно изменить — общий вес и КБЖУ пересчитаются мгновенно.</div>
+              
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <sc-for list="{{ ing }}" as="i" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid #D5D0C5;border-radius:10px;background:#FAF9F5">
+                    <div style="width:38px;height:38px;border-radius:8px;background:#EDE8DF;border:1px solid #D5D0C5;display:flex;align-items:center;justify-content:center;font-size:16px;flex:none;overflow:hidden">
+                      <sc-if value="{{ i.hasImage }}" hint-placeholder-val="{{ true }}">
+                        <img src="{{ i.image_url }}" alt="{{ i.name }}" style="width:100%;height:100%;object-fit:cover;display:block" />
+                      </sc-if>
+                      <sc-if value="{{ i.noImage }}" hint-placeholder-val="{{ false }}">
+                        <span>{{ i.icon }}</span>
+                      </sc-if>
+                    </div>
+                    <div style="min-width:0;flex:1">
+                      <div style="font-size:14px;font-weight:600;color:#1A1917">{{ i.name }}</div>
+                      <div class="mono" style="font-size:12px;color:#56534C;margin-top:2px">{{ i.nutriText }}</div>
+                    </div>
+                    <div class="mono" style="font-size:14px;font-weight:600;white-space:nowrap">{{ i.amountText }}</div>
+                    <button type="button" onClick="{{ i.onEdit }}" style="background:#EAE6DD;border:1px solid #D5D0C5;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:13px;font-weight:500">Изменить</button>
+                    <button type="button" onClick="{{ i.onRemove }}" aria-label="Убрать продукт" title="Убрать из состава" style="background:transparent;border:none;cursor:pointer;color:#8A857B;font-size:18px;padding:6px">×</button>
+                  </div>
+                </sc-for>
+              </div>
+
+              <button type="button" onClick="{{ onExitComposer }}" style="margin-top:14px;background:#EAE6DD;border:1px solid #D5D0C5;color:#1A1917;border-radius:10px;padding:11px 16px;font-weight:600;font-size:14px;cursor:pointer;width:100%">＋ Добавить ещё из холодильника</button>
+            </div>
+          </sc-if>
+
+          <!-- STEP 2: НАЗВАНИЕ И ВЫХОД БЛЮДА -->
+          <sc-if value="{{ step2 }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:14px;padding:18px">
+              <div class="serif" style="font-size:18px;font-weight:600;margin-bottom:12px">Параметры блюда</div>
+              
+              <label style="font-size:13px;color:#56534C;display:block;margin-bottom:6px">Название партии</label>
+              <div style="display:flex;gap:8px;align-items:stretch">
+                <input type="text" value="{{ cName }}" onChange="{{ onName }}" placeholder="Например, индейка с чечевицей" style="flex:1;background:#FAF9F5;border:1px solid #D5D0C5;border-radius:10px;padding:0 14px;font-size:15px;height:48px;outline:none" />
+                <button type="button" onClick="{{ onMagic }}" title="Предложить название через Hermes AI" style="background:#EDE8DF;border:1px solid #D5D0C5;border-radius:10px;padding:0 14px;font-size:13.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap">
+                  <span>🪄 Hermes</span>
+                </button>
+              </div>
+
+              <sc-if value="{{ hermesLoading }}" hint-placeholder-val="{{ false }}">
+                <div class="mono" style="font-size:12px;color:#56534C;margin-top:6px">Генерируем кулинарное название…</div>
+              </sc-if>
+              <sc-if value="{{ hermesAlt }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:8px;background:#EDE8DF;border:1px solid #D5D0C5;border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between">
+                  <div style="font-size:13.5px">Вариант: <strong>{{ altNameText }}</strong></div>
+                  <button type="button" onClick="{{ onUseAlt }}" style="background:#1E5B3C;color:#FAF9F5;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer">Применить</button>
+                </div>
+              </sc-if>
+
+              <div style="height:1px;background:#D5D0C5;margin:18px 0"></div>
+
+              <label style="font-size:13px;color:#56534C;display:block;margin-bottom:6px">Фактический готовый вес (уварка / упёк)</label>
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;background:#FAF9F5;border:1px solid #D5D0C5;border-radius:10px;padding:0 12px;height:48px">
+                  <input type="text" inputMode="numeric" value="{{ cYield }}" onChange="{{ onYield }}" placeholder="{{ yieldPlaceholder }}" style="width:90px;border:none;background:transparent;font-size:17px;font-weight:600;outline:none;text-align:right" class="mono" />
+                  <span class="mono" style="color:#8A857B;margin-left:6px">г</span>
+                </div>
+                <div class="mono" style="font-size:12.5px;color:#56534C">{{ yieldNote }}</div>
+              </div>
+
+              <div style="height:1px;background:#D5D0C5;margin:18px 0"></div>
+
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <div>
+                  <div style="font-size:14px;font-weight:600">Фото блюда</div>
+                  <div style="font-size:12.5px;color:#56534C;margin-top:2px">Используется только для узнавания — КБЖУ считается по составу.</div>
+                </div>
+                <button type="button" onClick="{{ onUploadPhoto }}" style="background:#EDE8DF;border:1px solid #D5D0C5;border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer">
+                  <span>📷 {{ photoBtnText }}</span>
+                </button>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- STEP 3: ПОРЦИИ & КОНТЕЙНЕРЫ -->
+          <sc-if value="{{ step3 }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:14px;padding:18px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                <div class="serif" style="font-size:18px;font-weight:600">Распределение по контейнерам</div>
+              </div>
+
+              <!-- Mode Selector Tabs -->
+              <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:16px">
+                <sc-for list="{{ modes }}" as="m" hint-placeholder-count="3">
+                  <button type="button" onClick="{{ m.on }}" style="{{ m.s }}">
+                    <div style="font-size:14px;font-weight:600">{{ m.label }}</div>
+                    <div style="font-size:11.5px;color:#56534C;margin-top:2px">{{ m.hint }}</div>
+                  </button>
+                </sc-for>
+              </div>
+
+              <!-- MODE EQUAL -->
+              <sc-if value="{{ modeEqual }}" hint-placeholder-val="{{ true }}">
+                <div style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:14px">
+                  
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+                    <span style="font-size:14.5px;font-weight:500;color:#1A1917">Количество контейнеров:</span>
+                    <div style="display:flex;align-items:center;gap:4px;background:#EDE8DF;border:1px solid #D5D0C5;border-radius:10px;padding:3px">
+                      <button type="button" onClick="{{ onCountMinus }}" aria-label="Меньше контейнеров" style="width:38px;height:38px;border:none;background:transparent;font-size:18px;cursor:pointer;border-radius:6px">−</button>
+                      <span class="mono" style="min-width:38px;text-align:center;font-size:17px;font-weight:700">{{ cCount }}</span>
+                      <button type="button" onClick="{{ onCountPlus }}" aria-label="Больше контейнеров" style="width:38px;height:38px;border:none;background:transparent;font-size:18px;cursor:pointer;border-radius:6px">＋</button>
+                    </div>
+                  </div>
+
+                  <!-- Consolidated Hero Container Card -->
+                  <div style="background:#FAF9F5;border:1.5px solid #1E5B3C;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px">
+                    <div style="display:flex;align-items:center;justify-content:space-between">
+                      <span style="font-size:14px;font-weight:600;color:#1E5B3C">{{ cCount }} одинаковых контейнера × ~{{ equalWeightEach }} г</span>
+                      <span class="mono" style="font-size:12px;color:#56534C">100% выхода партии</span>
+                    </div>
+                    
+                    <div style="display:flex;align-items:baseline;gap:8px;margin-top:4px">
+                      <span class="mono" style="font-size:26px;font-weight:700;color:#1A1917">{{ equalHeroCarbs }}</span>
+                      <span style="font-size:13px;color:#56534C">углеводов в одной порции для инсулина</span>
+                    </div>
+
+                    <div class="mono" style="font-size:14px;font-weight:500;color:#1A1917;background:#EDE8DF;border-radius:8px;padding:8px 12px;margin-top:4px">
+                      {{ equalMacroLine }}
+                    </div>
+                  </div>
+
+                </div>
+              </sc-if>
+
+              <!-- MODE FIXED -->
+              <sc-if value="{{ modeFixed }}" hint-placeholder-val="{{ false }}">
+                <div style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px">
+                  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                    <span style="font-size:14px;font-weight:500">Порция:</span>
+                    <div style="display:flex;align-items:center;background:#FAF9F5;border:1px solid #D5D0C5;border-radius:10px;padding:0 12px;height:44px">
+                      <input type="text" inputMode="numeric" value="{{ cFixed }}" onChange="{{ onFixed }}" style="width:65px;border:none;background:transparent;font-size:16px;font-weight:600;text-align:right;outline:none" class="mono" />
+                      <span class="mono" style="color:#8A857B;margin-left:6px">г</span>
+                    </div>
+                    <span class="mono" style="font-size:13px;color:#56534C">{{ fixedHint }}</span>
+                  </div>
+
+                  <sc-if value="{{ hasRemainder }}" hint-placeholder-val="{{ false }}">
+                    <label style="display:flex;align-items:center;gap:10px;background:#EDE8DF;border:1px solid #D5D0C5;border-radius:10px;padding:10px 14px;font-size:13.5px;cursor:pointer">
+                      <input type="checkbox" checked="{{ keepRem }}" onChange="{{ onToggleRem }}" style="width:18px;height:18px;accent-color:#1E5B3C" />
+                      <span class="mono">{{ remText }}</span>
+                    </label>
+                  </sc-if>
+                </div>
+              </sc-if>
+
+              <!-- MODE CUSTOM -->
+              <sc-if value="{{ modeCustom }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <sc-for list="{{ rows }}" as="r" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid #D5D0C5;border-radius:10px;background:#FAF9F5;flex-wrap:wrap">
+                      <span class="serif" style="font-size:14px;font-weight:600;min-width:110px">{{ r.title }}</span>
+                      
+                      <div style="display:flex;align-items:center;background:#EDE8DF;border:1px solid #D5D0C5;border-radius:8px;padding:0 8px;height:38px">
+                        <input type="text" inputMode="numeric" value="{{ r.weight }}" onChange="{{ r.onWeight }}" style="width:55px;border:none;background:transparent;font-size:14.5px;font-weight:600;text-align:right;outline:none" class="mono" />
+                        <span class="mono" style="color:#8A857B;margin-left:4px;font-size:12px">г</span>
+                      </div>
+
+                      <div class="mono" style="font-size:13.5px;font-weight:600;color:#1E5B3C;min-width:70px">{{ r.carbsHero }}</div>
+                      <div class="mono" style="font-size:12px;color:#56534C;flex:1;min-width:120px">{{ r.pfcText }}</div>
+
+                      <button type="button" onClick="{{ r.onRemove }}" style="background:transparent;border:none;cursor:pointer;color:#8A857B;font-size:16px;padding:6px">×</button>
+                    </div>
+                  </sc-for>
+
+                  <div style="display:flex;gap:10px;margin-top:6px">
+                    <button type="button" onClick="{{ onAddRow }}" style="background:#EAE6DD;border:1px solid #D5D0C5;border-radius:10px;padding:10px 14px;font-weight:600;font-size:13.5px;cursor:pointer">＋ Добавить контейнер</button>
+                    <sc-if value="{{ showFix }}" hint-placeholder-val="{{ false }}">
+                      <button type="button" onClick="{{ onFixDiff }}" style="background:#EDE8DF;border:1px solid #C27803;color:#9A7B33;border-radius:10px;padding:10px 14px;font-weight:600;font-size:13.5px;cursor:pointer">Распределить разницу</button>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-if>
+
+            </div>
+          </sc-if>
+
+          <!-- STEP 4: ПРОВЕРКА И СОХРАНЕНИЕ -->
+          <sc-if value="{{ step4 }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:14px;padding:20px">
+              <div class="serif" style="font-size:22px;font-weight:600;line-height:1.2">{{ reviewName }}</div>
+              <div class="mono" style="font-size:13.5px;color:#56534C;margin-top:4px">{{ reviewSub }}</div>
+
+              <div style="margin-top:16px;background:#FAF9F5;border:1.5px solid #1E5B3C;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px">
+                <div style="font-size:13px;font-weight:600;color:#1E5B3C;letter-spacing:0.04em;text-transform:uppercase">На один контейнер (доза)</div>
+                <div style="display:flex;align-items:baseline;gap:8px">
+                  <span class="mono" style="font-size:28px;font-weight:700;color:#1A1917">{{ perContCarbsHero }}</span>
+                  <span style="font-size:14px;color:#56534C">Углеводы</span>
+                </div>
+                <div class="mono" style="font-size:14px;color:#1A1917;background:#EDE8DF;border-radius:8px;padding:8px 12px">
+                  {{ perContMacroFull }}
+                </div>
+              </div>
+
+              <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap">
+                <button type="button" onClick="{{ onSave }}" style="flex:2;min-width:200px;background:#1E5B3C;color:#FAF9F5;border:none;border-radius:12px;padding:14px 22px;font-weight:600;font-size:15.5px;cursor:pointer;min-height:50px">Сохранить в холодильник</button>
+                <button type="button" onClick="{{ onSavePrint }}" style="flex:1;min-width:180px;background:transparent;border:1px solid #1E5B3C;color:#1E5B3C;border-radius:12px;padding:14px 18px;font-weight:600;font-size:15px;cursor:pointer;min-height:50px">Печать этикеток</button>
+              </div>
+              <div style="font-size:12px;color:#8A857B;margin-top:8px">Сохранение спишет ингредиенты в базе данных через FastAPI.</div>
+            </div>
+          </sc-if>
+
+          <!-- Stepper Buttons (Prev / Next) -->
+          <div style="display:flex;gap:10px;justify-content:space-between;margin-top:8px">
+            <button type="button" onClick="{{ onPrev }}" disabled="{{ prevDisabled }}" style="{{ prevS }}">← Назад</button>
+            <sc-if value="{{ showNext }}" hint-placeholder-val="{{ true }}">
+              <button type="button" onClick="{{ onNext }}" style="background:#1E5B3C;color:#FAF9F5;border:none;border-radius:10px;padding:12px 24px;font-weight:600;font-size:15px;cursor:pointer;min-height:46px">{{ nextLabel }}</button>
+            </sc-if>
+          </div>
+
+        </div>
+
+        <!-- Right Summary Sticky Column -->
+        <div style="position:sticky;top:84px;display:flex;flex-direction:column;gap:12px">
+          
+          <div style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:14px;padding:16px">
+            <div style="font-size:11.5px;color:#56534C;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">Ориентир для инсулина</div>
+            
+            <div style="margin-top:10px;display:flex;align-items:baseline;gap:6px">
+              <span class="mono" style="font-size:32px;font-weight:700;color:#1A1917;line-height:1">{{ sideCarbsHero }}</span>
+              <span style="font-size:13px;color:#56534C">У на контейнер</span>
+            </div>
+
+            <div class="mono" style="font-size:13px;color:#1A1917;margin-top:8px">{{ sidePortionMacro }}</div>
+            
+            <div style="height:1px;background:#D5D0C5;margin:12px 0"></div>
+            
+            <div style="font-size:11px;color:#8A857B;text-transform:uppercase;letter-spacing:0.03em">Итог всей партии (справочно):</div>
+            <div class="mono" style="font-size:13px;color:#56534C;margin-top:4px">
+              Всего {{ sumWeight }} · {{ sumKcal }} (У {{ sumCarbsTotal }} г)
+            </div>
+          </div>
+
+          <!-- On Step 1: Carbs breakdown (Clinical value for insulin management) -->
+          <sc-if value="{{ showCarbSources }}">
+            <div style="background:#EDE8DF;border:1px solid #D5D0C5;border-radius:14px;padding:14px">
+              <div style="font-size:12px;font-weight:600;color:#56534C;margin-bottom:8px">Вклад в углеводы партии</div>
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <sc-for list="{{ carbSources }}" as="cs" hint-placeholder-count="3">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px" class="mono">
+                    <span style="color:#1A1917;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ cs.shortName }}</span>
+                    <span style="font-weight:600;white-space:nowrap;color:#1E5B3C">{{ cs.carbs }} <span style="font-weight:400;color:#56534C;font-size:11px">({{ cs.carbsPct }})</span></span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- On Steps 2, 3, 4: Compact Ingredients reminder -->
+          <sc-if value="{{ showSideIngList }}">
+            <div style="background:#EDE8DF;border:1px solid #D5D0C5;border-radius:14px;padding:14px">
+              <div style="font-size:12px;font-weight:600;color:#56534C;margin-bottom:8px">Ингредиенты ({{ ing.length }})</div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <sc-for list="{{ ing }}" as="i" hint-placeholder-count="4">
+                  <div style="display:flex;justify-content:space-between;gap:8px;font-size:13px" class="mono">
+                    <span style="color:#1A1917;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ i.shortName }}</span>
+                    <span style="font-weight:600;white-space:nowrap">{{ i.amountText }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+        </div>
+
+      </div>
+
+    </div>
+  </sc-if>
+
+  <!-- ==================== SCREEN 3: МИЛПРЕПЫ (BATCHES) ==================== -->
+  <sc-if value="{{ isPreps }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;max-width:1120px;width:100%;margin:0 auto;padding:24px 24px 44px">
+      <div class="serif" style="font-size:28px;font-weight:600;line-height:1.15">Готовые милпрепы</div>
+      <div class="mono" style="font-size:13px;color:#56534C;margin-top:4px">{{ prepsSub }}</div>
+      
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin:16px 0">
+        <sc-for list="{{ prepChips }}" as="c" hint-placeholder-count="4">
+          <button type="button" onClick="{{ c.on }}" style="{{ c.s }}">{{ c.label }}</button>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{ hasBatches }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px">
+          <sc-for list="{{ batches }}" as="b" hint-placeholder-count="2">
+            <div onClick="{{ b.onOpen }}" role="button" tabIndex="0" style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;cursor:pointer;box-shadow:0 1px 3px rgba(26,25,23,0.04)">
+              
+              <div style="padding:16px;display:flex;flex-direction:column;gap:8px;flex:1">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                  <div class="serif" style="font-size:18px;font-weight:600;line-height:1.25;color:#1A1917">{{ b.name }}</div>
+                  <span class="mono" style="{{ b.statusS }}">{{ b.statusText }}</span>
+                </div>
+                
+                <div class="mono" style="font-size:12px;color:#56534C">{{ b.dateText }}</div>
+                
+                <div style="background:#EDE8DF;border:1px solid #D5D0C5;border-radius:10px;padding:10px 12px;margin-top:4px">
+                  <div class="mono" style="font-size:14.5px;font-weight:700;color:#1E5B3C">{{ b.heroDose }}</div>
+                  <div class="mono" style="font-size:12px;color:#56534C;margin-top:2px">{{ b.perText }}</div>
+                </div>
+
+                <div class="mono" style="font-size:13px;font-weight:600;color:#1A1917;margin-top:auto;padding-top:6px">{{ b.leftText }}</div>
+                
+                <button type="button" onClick="{{ b.onOpen }}" style="background:transparent;border:1px solid #C9C4B7;border-radius:8px;padding:10px;font-weight:600;cursor:pointer;font-size:13.5px;margin-top:6px">Открыть контейнеры</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ noBatches }}" hint-placeholder-val="{{ false }}">
+        <div style="text-align:center;padding:48px 24px;background:#EDE8DF;border:1px solid #D5D0C5;border-radius:14px">
+          <div style="font-size:26px">🥣</div>
+          <div style="font-size:15px;font-weight:600;margin-top:8px;color:#1A1917">Нет партий в этой вкладке</div>
+          <div style="font-size:13px;color:#56534C;margin-top:4px">Все готовые милпрепы появятся здесь после сохранения.</div>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <!-- ==================== SCREEN 4: ДОБАВИТЬ ЧЕК ==================== -->
+  <sc-if value="{{ isAdd }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;max-width:680px;width:100%;margin:0 auto;padding:32px 24px 44px">
+      <div class="serif" style="font-size:26px;font-weight:600">Добавить продукты</div>
+      <div style="font-size:13.5px;color:#56534C;margin-top:6px">Фискальный чек разбирается автоматически. БЖУ и фото подтягиваются в фоне через GTIN.</div>
+      
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:20px">
+        <button type="button" onClick="{{ onImportEmailSample }}" style="background:#1E5B3C;color:#FAF9F5;border:none;border-radius:14px;padding:18px 20px;text-align:left;cursor:pointer">
+          <div style="font-size:16px;font-weight:600">Импортировать чек из почты Магнита</div>
+          <div style="font-size:12.5px;opacity:.85;margin-top:2px">Прямой разбор MIME-письма ofd-magnit.ru в API</div>
+        </button>
+        <button type="button" onClick="{{ onFridge }}" style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:14px;padding:18px 20px;text-align:left;cursor:pointer">
+          <div style="font-size:16px;font-weight:600">Сканировать QR фискального чека</div>
+          <div style="font-size:12.5px;color:#56534C;margin-top:2px">Импорт через ФНС / ОФД</div>
+        </button>
+        <button type="button" onClick="{{ onFridge }}" style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:14px;padding:18px 20px;text-align:left;cursor:pointer">
+          <div style="font-size:16px;font-weight:600">Добавить вручную</div>
+          <div style="font-size:12.5px;color:#56534C;margin-top:2px">Название, масса упаковки и БЖУ</div>
+        </button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ==================== BOTTOM SHEETS ==================== -->
+  <sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(26,25,23,0.45);z-index:60;display:flex;align-items:flex-end;justify-content:center" onClick="{{ onCloseSheet }}">
+      <div style="background:#FAF9F5;width:100%;max-width:540px;border-radius:20px 20px 0 0;padding:22px 24px 34px;box-shadow:0 -8px 30px rgba(0,0,0,0.18);max-height:85vh;overflow-y:auto" onClick="{{ stop }}">
+        
+        <div style="width:36px;height:4px;background:#C9C4B7;border-radius:99px;margin:0 auto 16px"></div>
+
+        <!-- AMOUNT SHEET -->
+        <sc-if value="{{ isAmountSheet }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div class="serif" style="font-size:20px;font-weight:600">{{ sheetTitle }}</div>
+            <div class="mono" style="font-size:13px;color:#56534C;margin-top:2px">Доступно: {{ sheetAvailText }}</div>
+
+            <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+              <sc-for list="{{ sheetPresets }}" as="pr" hint-placeholder-count="3">
+                <button type="button" onClick="{{ pr.on }}" style="{{ pr.s }}">{{ pr.label }}</button>
+              </sc-for>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;background:#EDE8DF;border:1px solid #D5D0C5;border-radius:12px;padding:8px 14px">
+              <span style="font-size:14px;font-weight:500">{{ sheetFieldLabel }}</span>
+              <div style="display:flex;align-items:center;background:#FAF9F5;border:1px solid #D5D0C5;border-radius:8px;padding:0 10px;height:42px">
+                <input type="text" inputMode="numeric" value="{{ sheetCustom }}" onChange="{{ onSheetCustom }}" style="width:70px;border:none;background:transparent;font-size:16px;font-weight:700;text-align:right;outline:none" class="mono" />
+                <span class="mono" style="color:#8A857B;margin-left:6px;font-size:13px">{{ sheetUnit }}</span>
+              </div>
+            </div>
+
+            <div class="mono" style="font-size:12.5px;color:#56534C;margin-top:8px">{{ sheetNutriPreview }}</div>
+
+            <div style="display:flex;gap:10px;margin-top:18px">
+              <button type="button" onClick="{{ onCloseSheet }}" style="flex:1;background:transparent;border:1px solid #C9C4B7;border-radius:10px;padding:12px;font-weight:500;cursor:pointer">Отмена</button>
+              <button type="button" onClick="{{ onApplyAmount }}" style="flex:2;background:#1E5B3C;color:#FAF9F5;border:none;border-radius:10px;padding:12px;font-weight:600;font-size:15px;cursor:pointer">{{ applyLabel }}</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- PRODUCT DETAIL SHEET -->
+        <sc-if value="{{ isProductSheet }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="display:flex;gap:14px;align-items:center;margin-bottom:12px">
+              <sc-if value="{{ prodHasImage }}" hint-placeholder-val="{{ true }}">
+                <img src="{{ prodImageUrl }}" alt="{{ prodSheetName }}" style="width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid #D5D0C5;flex:none;background:#EDE8DF" />
+              </sc-if>
+              <div style="min-width:0;flex:1">
+                <div class="serif" style="font-size:20px;font-weight:600;line-height:1.25">{{ prodSheetName }}</div>
+                <div class="mono" style="font-size:12px;color:#8A857B;margin-top:2px">Чек: {{ receiptName }}</div>
+              </div>
+            </div>
+            
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <span style="{{ prodSheetExpS }}">{{ prodSheetExpText }}</span>
+              <span class="mono" style="font-size:12px;color:#56534C;padding:4px 8px;background:#EDE8DF;border-radius:6px">{{ prodSheetAvail }}</span>
+            </div>
+
+            <div style="margin-top:14px;background:#EDE8DF;border:1px solid #D5D0C5;border-radius:12px;padding:12px">
+              <div style="font-size:12px;color:#56534C;text-transform:uppercase;letter-spacing:0.03em">КБЖУ на 100 {{ sheetBaseUnit }}</div>
+              <div class="mono" style="font-size:14px;font-weight:600;margin-top:4px">{{ sheetNutri }}</div>
+            </div>
+
+            <div style="display:flex;gap:8px;margin-top:18px">
+              <button type="button" onClick="{{ onUseFromDetail }}" style="flex:2;background:#1E5B3C;color:#FAF9F5;border:none;border-radius:10px;padding:12px;font-weight:600;cursor:pointer">В милпреп</button>
+              <button type="button" onClick="{{ onEatFromDetail }}" style="flex:2;background:#FAF9F5;color:#1A1917;border:1px solid #D5D0C5;border-radius:10px;padding:12px;font-weight:600;cursor:pointer">🍽 Съесть...</button>
+              <button type="button" onClick="{{ onFixData }}" style="flex:1;background:transparent;border:1px solid #C9C4B7;border-radius:10px;padding:12px;font-weight:500;cursor:pointer" title="Изменить БЖУ">БЖУ</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- BATCH SHEET (CONTAINERS LIST) -->
+        <sc-if value="{{ isBatchSheet }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+              <div>
+                <div class="serif" style="font-size:22px;font-weight:600;line-height:1.2">{{ batchSheetName }}</div>
+                <div class="mono" style="font-size:13px;color:#56534C;margin-top:2px">{{ batchSub }}</div>
+              </div>
+              <button type="button" onClick="{{ onRenameBatch }}" style="background:transparent;border:1px solid #C9C4B7;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;color:#56534C;cursor:pointer;flex:none;white-space:nowrap" title="Изменить название милпрепа">✎ Название</button>
+            </div>
+
+            <div style="margin-top:12px;background:#EDE8DF;border:1px solid #D5D0C5;border-radius:10px;padding:12px">
+              <div class="mono" style="font-size:16px;font-weight:700;color:#1E5B3C">{{ batchHeroDose }}</div>
+              <div class="mono" style="font-size:12.5px;color:#56534C;margin-top:2px">{{ batchTotals }}</div>
+            </div>
+
+            <div style="font-size:13px;font-weight:600;margin:16px 0 8px">Контейнеры партии:</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{ batchContainers }}" as="c" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#EDE8DF;border:1px solid #D5D0C5;border-radius:10px">
+                  <div>
+                    <div style="font-size:14px;font-weight:600">{{ c.title }}</div>
+                    <div class="mono" style="font-size:12px;color:#56534C">{{ c.meta }}</div>
+                  </div>
+                  <div style="display:flex;gap:8px;align-items:center">
+                    <button type="button" onClick="{{ c.onLabel }}" style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer" title="Этикетка">Этикетка</button>
+                    <button type="button" onClick="{{ c.onGluco }}" style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer" title="Передать в дневник">GlucoTracker</button>
+                    <sc-if value="{{ c.isAvailable }}" hint-placeholder-val="{{ true }}">
+                      <button type="button" onClick="{{ c.onWriteoff }}" style="background:transparent;border:1px solid #C9C4B7;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer">Списать</button>
+                    </sc-if>
+                    <sc-if value="{{ c.isConsumed }}" hint-placeholder-val="{{ false }}">
+                      <span style="font-size:12px;font-weight:600;color:#8A857B;padding:6px 10px;background:#EAE6DD;border-radius:6px">Съеден ✓</span>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="display:flex;gap:10px;margin-top:16px">
+              <button type="button" onClick="{{ onPrintBatch }}" style="flex:1;background:#1E5B3C;color:#FAF9F5;border:none;border-radius:10px;padding:12px;font-weight:600;cursor:pointer">Печать всех этикеток</button>
+              <button type="button" onClick="{{ onCloseSheet }}" style="background:transparent;border:1px solid #C9C4B7;border-radius:10px;padding:12px 18px;font-weight:500;cursor:pointer">Закрыть</button>
+            </div>
+          </div>
+        </sc-if>
+
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ==================== THERMAL LABEL PREVIEW (XP-365B) ==================== -->
+  <sc-if value="{{ labelOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(26,25,23,0.55);z-index:70;display:flex;align-items:center;justify-content:center;padding:20px" onClick="{{ onCloseLabel }}">
+      <div style="background:#FFFFFF;color:#000000;width:100%;max-width:400px;border-radius:12px;padding:20px;box-shadow:0 12px 40px rgba(0,0,0,0.3)" onClick="{{ stop }}">
+        
+        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px">Термоэтикетка Xprinter XP-365B (58×40 мм)</div>
+        
+        <div style="border:2px dashed #000;border-radius:6px;padding:14px;background:#FFF">
+          <div style="font-size:16px;font-weight:700;line-height:1.2">{{ labelDishName }}</div>
+          <div class="mono" style="font-size:12px;color:#333;margin-top:3px">{{ labelDate }} · Контейнер {{ labelContNum }}</div>
+          
+          <div style="height:1px;background:#000;margin:8px 0"></div>
+          
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div class="mono" style="font-size:22px;font-weight:800;line-height:1">УГЛЕВОДЫ: {{ labelCarbs }} г</div>
+              <div class="mono" style="font-size:13px;font-weight:700;margin-top:4px">{{ labelKcal }} ккал · {{ labelWeight }} г</div>
+              <div class="mono" style="font-size:11px;color:#333;margin-top:2px">{{ labelPfc }}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+              <div style="width:58px;height:58px;background:#EEE;border:1px solid #000;display:flex;align-items:center;justify-content:center;font-size:9px;text-align:center" class="mono">
+                {{ labelCode }}
+              </div>
+              <span class="mono" style="font-size:9px;color:#666">DataMatrix</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <button type="button" onClick="{{ onDoPrint }}" style="flex:2;background:#1E5B3C;color:#FAF9F5;border:none;border-radius:8px;padding:12px;font-weight:600;cursor:pointer">Напечатать</button>
+          <button type="button" onClick="{{ onCloseLabel }}" style="flex:1;background:transparent;border:1px solid #999;border-radius:8px;padding:12px;cursor:pointer">Закрыть</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ==================== MODAL DIALOG ==================== -->
+  <sc-if value="{{ dialogOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(26,25,23,0.5);z-index:75;display:flex;align-items:center;justify-content:center;padding:20px" onClick="{{ onCloseDlg }}">
+      <div style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:14px;padding:20px;max-width:440px;width:100%;box-shadow:0 12px 36px rgba(0,0,0,0.2)" onClick="{{ stop }}">
+        <div class="serif" style="font-size:18px;font-weight:600">{{ dlgTitle }}</div>
+        <sc-if value="{{ dlgText }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:13.5px;color:#56534C;margin-top:6px">{{ dlgText }}</div>
+        </sc-if>
+
+        <sc-if value="{{ hasDlgFields }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+            <sc-for list="{{ dlgFields }}" as="f" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <span style="font-size:13.5px">{{ f.label }}:</span>
+                <div style="display:flex;align-items:center;background:#EDE8DF;border:1px solid #D5D0C5;border-radius:8px;padding:0 10px;height:38px">
+                  <input type="text" inputMode="numeric" value="{{ f.value }}" onChange="{{ f.on }}" style="width:65px;border:none;background:transparent;font-size:14.5px;font-weight:600;text-align:right;outline:none" class="mono" />
+                  <span class="mono" style="color:#8A857B;margin-left:4px;font-size:12px">{{ f.unit }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ hasDlgOptions }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+            <sc-for list="{{ dlgOptions }}" as="opt" hint-placeholder-count="3">
+              <button type="button" onClick="{{ opt.on }}" style="{{ opt.s }}">
+                <div style="font-size:13.5px;font-weight:600">{{ opt.title }}</div>
+                <div class="mono" style="font-size:12px;color:#56534C">{{ opt.sub }}</div>
+              </button>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <div style="display:flex;gap:10px;margin-top:18px">
+          <button type="button" onClick="{{ onCloseDlg }}" style="flex:1;background:transparent;border:1px solid #C9C4B7;border-radius:8px;padding:10px;font-weight:500;cursor:pointer">Отмена</button>
+          <sc-if value="{{ dlgConfirmLabel }}" hint-placeholder-val="{{ true }}">
+            <button type="button" onClick="{{ onDlgConfirm }}" style="flex:2;background:#1E5B3C;color:#FAF9F5;border:none;border-radius:8px;padding:10px;font-weight:600;cursor:pointer">{{ dlgConfirmLabel }}</button>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ==================== CONTEXT MENU (RIGHT CLICK / LONG PRESS) ==================== -->
+  <sc-if value="{{ hasContextMenu }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;z-index:90;background:transparent" onClick="{{ onCloseContextMenu }}" onContextMenu="{{ onCloseContextMenu }}"></div>
+    <div style="{{ contextMenuStyle }}">
+      <div style="padding:9px 12px 7px;font-size:12px;font-weight:700;color:#8A857B;border-bottom:1px solid #EAE6DD;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px;letter-spacing:0.3px;text-transform:uppercase">
+        {{ contextMenuTitle }}
+      </div>
+      <div style="padding:4px">
+        <sc-if value="{{ ctxHasMultiSel }}" hint-placeholder-val="{{ false }}">
+          <button type="button" onClick="{{ onCtxConsumeAllSel }}" style="width:100%;text-align:left;background:transparent;border:none;padding:8px 10px;border-radius:6px;font-size:13.5px;font-weight:600;color:#1E5B3C;cursor:pointer;display:flex;align-items:center;gap:8px">
+            <span style="font-size:15px">🍽</span> <span>Съедено всё выбранное ({{ selCount }})</span>
+          </button>
+          <div style="height:1px;background:#EAE6DD;margin:4px 0"></div>
+        </sc-if>
+        <button type="button" onClick="{{ onCtxConsumeFull }}" style="width:100%;text-align:left;background:transparent;border:none;padding:8px 10px;border-radius:6px;font-size:13.5px;font-weight:500;color:#1A1917;cursor:pointer;display:flex;align-items:center;gap:8px">
+          <span style="font-size:15px">🍴</span> <span>Съедено целиком ({{ ctxAvailText }})</span>
+        </button>
+        <button type="button" onClick="{{ onCtxConsumePart }}" style="width:100%;text-align:left;background:transparent;border:none;padding:8px 10px;border-radius:6px;font-size:13.5px;font-weight:500;color:#1A1917;cursor:pointer;display:flex;align-items:center;gap:8px">
+          <span style="font-size:15px">⚖️</span> <span>Съедено частично...</span>
+        </button>
+        <button type="button" onClick="{{ onCtxToggleSel }}" style="width:100%;text-align:left;background:transparent;border:none;padding:8px 10px;border-radius:6px;font-size:13.5px;font-weight:500;color:#1A1917;cursor:pointer;display:flex;align-items:center;gap:8px">
+          <span style="font-size:15px">{{ ctxIsSel ? '✕' : '✓' }}</span> <span>{{ ctxIsSel ? 'Снять выбор' : 'Выбрать для милпрепа' }}</span>
+        </button>
+        <div style="height:1px;background:#EAE6DD;margin:4px 0"></div>
+        <button type="button" onClick="{{ onCtxDetail }}" style="width:100%;text-align:left;background:transparent;border:none;padding:8px 10px;border-radius:6px;font-size:13.5px;color:#56534C;cursor:pointer;display:flex;align-items:center;gap:8px">
+          <span style="font-size:15px">ℹ️</span> <span>Карточка продукта</span>
+        </button>
+        <button type="button" onClick="{{ onCtxDiscard }}" style="width:100%;text-align:left;background:transparent;border:none;padding:8px 10px;border-radius:6px;font-size:13.5px;color:#A8624E;cursor:pointer;display:flex;align-items:center;gap:8px">
+          <span style="font-size:15px">🗑</span> <span>Списать (испортилось)</span>
+        </button>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+
+<script type="text/x-dc" data-dc-script data-props='{"demoState":{"editor":"select","options":["нет","пустой холодильник","скелетоны","ошибка фото","ошибка печати","ошибка сохранения"],"value":"нет"}}'>
+class Component extends DCLogic {
+  ownerId = 'f51669a5-b262-475b-979c-4da82b072266';
+  apiBase = '';
+
+  cat = [
+    {id:'tvorog',name:'Творог «Село Зелёное» 5%, 200 г',short:'Творог',nom:'Творог',instr:'творогом',receipt:'ТВОРОГ СЕЛО ЗЕЛ 5% 200Г',unit:'г',pack:200,avail:400,per100:{k:105,p:12,f:5,c:3},q:'ok',exp:4,tags:['Молочные','Белковые'],icon:'🧀',
+     lots:[{qty:'200 г',meta:'до 21 августа · куплено 14.08'},{qty:'200 г',meta:'до 26 августа · куплено 16.08'}]},
+    {id:'epica',name:'Йогурт Epica с ананасом 4,8%, 130 г',short:'Йогурт Epica',nom:'Йогурт',instr:'йогуртом',receipt:'ЙОГУРТ EPICA АНАНАС 130Г',unit:'шт',pieceG:130,avail:4,per100:{k:120,p:5.7,f:4.8,c:13.6},q:'ok',exp:9,tags:['Молочные'],icon:'🍍',
+     lots:[{qty:'4 шт.',meta:'до 26 августа · куплено 16.08'}]},
+    {id:'slivki',name:'Сливки «Село Зелёное» 10%, 200 мл',short:'Сливки',nom:'Сливки',instr:'сливками',receipt:'СЛИВКИ СЕЛО ЗЕЛ 10% 200МЛ',unit:'мл',pack:200,avail:200,per100:{k:118,p:2.6,f:10,c:4.5},q:'ok',exp:2,tags:['Молочные'],icon:'🥛',
+     lots:[{qty:'200 мл',meta:'до 19 августа · куплено 15.08'}]},
+    {id:'indeika',name:'Индейка, филе бедра, 500 г',short:'Индейка',nom:'Индейка',instr:'индейкой',receipt:'ФИЛЕ БЕДРА ИНДЕЙКИ ОХЛ',unit:'г',pack:500,avail:500,per100:{k:138,p:20,f:6,c:0},q:'ok',exp:2,tags:['Белковые'],icon:'🍗',
+     lots:[{qty:'500 г',meta:'до 19 августа · куплено 16.08'}]},
+    {id:'lentil',name:'Чечевица красная, отварная, 300 г',short:'Чечевица',nom:'Чечевица',instr:'чечевицей',receipt:'ЧЕЧЕВИЦА КРАСНАЯ 500Г',unit:'г',avail:300,per100:{k:116,p:9,f:0.4,c:20},q:'ok',exp:3,tags:['Белковые'],icon:'🥣',
+     lots:[{qty:'300 г',meta:'приготовлено 16.08'}]},
+    {id:'karib',name:'Карибская смесь овощей, 400 г',short:'Овощная смесь',nom:'Овощная смесь',instr:'овощами',receipt:'СМЕСЬ КАРИБСКАЯ ЗАМОР 400Г',unit:'г',pack:400,avail:400,per100:{k:60,p:2,f:0.3,c:11},q:'est',exp:60,tags:['Овощи'],icon:'🌽',
+     lots:[{qty:'400 г',meta:'заморозка · куплено 09.08'}]},
+    {id:'azu',name:'Азу из индейки, 500 г',short:'Азу из индейки',nom:'Азу',instr:'азу',receipt:'АЗУ ИЗ ИНДЕЙКИ 500Г',unit:'г',pack:500,avail:500,per100:null,q:'pending',exp:1,tags:['Белковые'],icon:'🥩',
+     lots:[{qty:'500 г',meta:'до 18 августа · куплено 16.08'}]},
+    {id:'luk',name:'Лук красный, 460 г',short:'Лук красный',nom:'Лук',instr:'луком',receipt:'ЛУК КРАСНЫЙ ВЕС',unit:'г',avail:460,per100:{k:42,p:1.4,f:0.2,c:9},q:'est',exp:20,tags:['Овощи'],icon:'🧅',
+     lots:[{qty:'460 г',meta:'куплено 14.08'}]},
+    {id:'eggs',name:'Яйца куриные С1, 6 шт.',short:'Яйца',nom:'Яйца',instr:'яйцом',receipt:'ЯЙЦО КУРИНОЕ С1 10ШТ',unit:'шт',pieceG:60,avail:6,per100:{k:157,p:12.7,f:11.5,c:0.7},q:'ok',exp:12,tags:['Белковые'],icon:'🥚',
+     lots:[{qty:'6 шт.',meta:'до 29 августа · куплено 14.08'}]},
+    {id:'moloko',name:'Молоко «Простоквашино» 3,2%, 900 мл',short:'Молоко',nom:'Молоко',instr:'молоком',receipt:'МОЛОКО ПРОСТОКВАШИНО 3,2%',unit:'мл',pack:900,avail:900,per100:{k:60,p:3,f:3.2,c:4.7},q:'ok',exp:0,tags:['Молочные'],icon:'🥛',
+     lots:[{qty:'900 мл',meta:'срок сегодня 17.08 · куплено 10.08'}]},
+    {id:'brokkoli',name:'Брокколи замороженная, 700 г',short:'Брокколи',nom:'Брокколи',instr:'брокколи',receipt:'БРОККОЛИ ЗАМОР 700Г',unit:'г',pack:700,avail:700,per100:{k:34,p:2.8,f:0.4,c:6.6},q:'ok',exp:90,tags:['Овощи'],icon:'🥦',
+     lots:[{qty:'700 г',meta:'заморозка · куплено 02.08'}]},
+    {id:'gauda',name:'Сыр «Гауда» 45%, 240 г',short:'Сыр Гауда',nom:'Сыр',instr:'сыром',receipt:'СЫР ГАУДА 45% 240Г',unit:'г',avail:240,per100:{k:356,p:25,f:27,c:0},q:'ok',exp:12,tags:['Молочные','Белковые'],icon:'🧀',
+     lots:[{qty:'240 г',meta:'до 29 августа · куплено 14.08'}]},
+    {id:'kefir',name:'Кефир «Домик в деревне» 1%, 900 мл',short:'Кефир',nom:'Кефир',instr:'кефиром',receipt:'КЕФИР ДОМИК В ДЕРЕВНЕ 1%',unit:'мл',avail:400,per100:{k:40,p:3,f:1,c:4},q:'ok',exp:-1,tags:['Молочные'],icon:'🍶',
+     lots:[{qty:'400 мл',meta:'срок вышел 16 августа'}]},
+    {id:'maslo',name:'Масло оливковое Extra Virgin, 500 мл',short:'Масло',nom:'Масло',instr:'маслом',receipt:'МАСЛО ОЛИВКОВОЕ 500МЛ',unit:'мл',avail:500,per100:{k:884,p:0,f:100,c:0},q:'ok',exp:180,tags:['Овощи'],icon:'🫒',
+     lots:[{qty:'500 мл',meta:'до января 2027'}]}
+  ];
+
+  state = {
+    route:'fridge', q:'', chip:'Все',
+    sel:{}, stock:{}, sheet:null, sheetCustom:'', comp:null,
+    batches:[],
+    prepChip:'Все', label:null, toast:null, saveError:false, dialog:null,
+    ctxMenu:null,
+    backendOnline:false, backendLoaded:false
+  };
+
+  componentDidMount() {
+    this.initBackend();
+  }
+
+  getApiBase() {
+    if (window.location.protocol === 'file:') return 'http://127.0.0.1:8011';
+    return '';
+  }
+
+  async initBackend() {
+    this.apiBase = this.getApiBase();
+    await Promise.all([this.loadInventory(), this.loadBatches()]);
+    this.restoreDraft();
+  }
+
+  openContextMenu(e, id) {
+    if (e && e.preventDefault) e.preventDefault();
+    const x = Math.min(window.innerWidth - 260, Math.max(10, (e && e.clientX) ? e.clientX : 100));
+    const y = Math.min(window.innerHeight - 280, Math.max(10, (e && e.clientY) ? e.clientY : 100));
+    this.setState({ ctxMenu: { id, x, y } });
+  }
+
+  closeContextMenu() {
+    this.setState({ ctxMenu: null });
+  }
+
+  async consumeLots(items, reason = 'consumed') {
+    this.closeContextMenu();
+    const count = items.length;
+    try {
+      const res = await fetch(this.apiBase + '/inventory/consume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User-Id': this.ownerId },
+        body: JSON.stringify({ items, reason })
+      });
+      if (res.ok) {
+        await this.loadInventory();
+      }
+    } catch (e) {
+      console.warn('Backend consume call failed:', e);
+    }
+    
+    // Also update local state
+    const stock = Object.assign({}, this.state.stock);
+    const sel = Object.assign({}, this.state.sel);
+    for (const it of items) {
+      const p = this.cat.find(x => x.id === it.lot_id || x.lot_id === it.lot_id);
+      if (p) {
+        const deduct = parseFloat(it.quantity) || 0;
+        const currentAvail = this.avail(p);
+        const newStock = Math.max(0, currentAvail - deduct);
+        stock[p.id] = newStock;
+        if (sel[p.id] !== undefined) {
+          if (newStock <= 0) delete sel[p.id];
+          else sel[p.id] = Math.min(sel[p.id], newStock);
+        }
+      }
+    }
+    const txt = reason === 'consumed' 
+      ? (count === 1 ? 'Съедено ✓' : count + ' ' + this.pl(count, ['продукт списан', 'продукта списано', 'продуктов списано']) + ' ✓')
+      : 'Продукт списан в утилизацию 🗑';
+      
+    this.setState({ stock, sel, toast: { text: txt } });
+  }
+
+  async consumeSelected() {
+    const list = this.selList();
+    if (list.length === 0) return;
+    const items = list.map(s => ({
+      lot_id: s.p.lot_id || s.p.id,
+      quantity: s.amt,
+      unit: s.p.unit === 'г' ? 'g' : (s.p.unit === 'мл' ? 'ml' : 'pcs')
+    }));
+    await this.consumeLots(items, 'consumed');
+  }
+
+  saveDraft() {
+    try {
+      if (this.state.comp && Object.keys(this.state.sel).length > 0) {
+        localStorage.setItem('fridge_composer_draft', JSON.stringify({
+          route: this.state.route,
+          comp: this.state.comp,
+          sel: this.state.sel
+        }));
+      }
+    } catch(e) {}
+  }
+
+  restoreDraft() {
+    try {
+      const raw = localStorage.getItem('fridge_composer_draft');
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d && d.comp && d.sel && Object.keys(d.sel).length > 0) {
+          this.setState({
+            route: d.route || 'composer',
+            comp: d.comp,
+            sel: d.sel
+          });
+        }
+      }
+    } catch(e) {}
+  }
+
+  clearDraft() {
+    try { localStorage.removeItem('fridge_composer_draft'); } catch(e) {}
+  }
+
+  async loadInventory() {
+    try {
+      const res = await fetch(this.apiBase + '/inventory?include_empty=true', {
+        headers: { 'X-User-Id': this.ownerId, 'Content-Type': 'application/json' }
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const lots = await res.json();
+      if (Array.isArray(lots) && lots.length > 0) {
+        this.cat = lots.map(lot => this.mapBackendLot(lot));
+        this.setState({ backendOnline: true, backendLoaded: true });
+      } else {
+        this.setState({ backendOnline: true });
+      }
+    } catch (e) {
+      console.warn('Backend inventory fetch failed, keeping local items:', e);
+      this.setState({ backendOnline: false });
+    }
+  }
+
+  async loadBatches() {
+    let localBatches = [];
+    try {
+      const raw = localStorage.getItem('fridge_saved_batches');
+      if (raw) localBatches = JSON.parse(raw) || [];
+    } catch(e) {}
+
+    try {
+      const res = await fetch(this.apiBase + '/meal-prep/batches', {
+        headers: { 'X-User-Id': this.ownerId }
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const backendBatches = data.map(b => this.mapBackendBatch(b));
+        const all = backendBatches.slice();
+        for (const lb of localBatches) {
+          if (!all.some(x => x.id === lb.id || x.name === lb.name)) {
+            all.push(lb);
+          }
+        }
+        this.setState({ batches: all, backendOnline: true });
+        return;
+      }
+    } catch (e) {
+      console.warn('Backend batches fetch failed, using local storage:', e);
+    }
+    if (localBatches.length > 0) {
+      this.setState({ batches: localBatches });
+    }
+  }
+
+  mapBackendLot(lot) {
+    const p = lot.product || {};
+    const name = p.canonical_name || lot.display_name;
+    const short = p.brand || name.split(' ')[0];
+    const rawUnit = (lot.unit || '').toLowerCase().trim();
+    const remRaw = parseFloat(lot.remaining_quantity) || 0;
+    const prodNetQty = p.net_quantity ? parseFloat(p.net_quantity) : null;
+    const prodNetUnit = (p.net_unit || '').toLowerCase().trim();
+    const pieceWeight = p.piece_weight_g ? parseFloat(p.piece_weight_g) : null;
+    
+    let unitStr = 'г';
+    let rem = remRaw;
+    let weightGrams = lot.weight_grams ? parseFloat(lot.weight_grams) : null;
+    let estPieces = lot.estimated_pieces ? parseInt(lot.estimated_pieces, 10) : null;
+    let packCount = null;
+    let packSize = null;
+    
+    // 1. If weight in kg -> convert to grams
+    if (rawUnit === 'kg' || rawUnit === 'кг') {
+      rem = Math.round(remRaw * 1000);
+      unitStr = 'г';
+      weightGrams = rem;
+      if (pieceWeight && pieceWeight > 0) {
+        estPieces = Math.max(1, Math.round(rem / pieceWeight));
+      }
+    }
+    // 2. If weight in grams
+    else if (rawUnit === 'g' || rawUnit === 'г' || rawUnit === 'gr' || rawUnit === 'гр') {
+      rem = remRaw;
+      unitStr = 'г';
+      weightGrams = rem;
+      if (pieceWeight && pieceWeight > 0) {
+        estPieces = Math.max(1, Math.round(rem / pieceWeight));
+      }
+    }
+    // 3. If volume in ml or l
+    else if (rawUnit === 'ml' || rawUnit === 'мл' || rawUnit === 'l' || rawUnit === 'л') {
+      if (rawUnit.startsWith('l') || rawUnit.startsWith('л')) {
+        rem = Math.round(remRaw * 1000);
+      }
+      unitStr = 'мл';
+    }
+    // 4. If discrete units (pcs / packs):
+    else {
+      // Check if product is eggs or tea bags (pack of pieces)
+      if (prodNetUnit === 'pcs' || prodNetUnit === 'шт' || prodNetUnit === 'пак') {
+        const totalPcs = prodNetQty ? Math.round(remRaw * prodNetQty) : Math.round(remRaw);
+        rem = totalPcs;
+        unitStr = 'шт';
+        packCount = remRaw;
+        if (pieceWeight && pieceWeight > 0) {
+          weightGrams = rem * pieceWeight;
+        }
+      }
+      // If product has net weight in grams (e.g. canned tomatoes 400g, cottage cheese 200g, meat 500g, cheese 200g)
+      else if (prodNetQty && (prodNetUnit === 'g' || prodNetUnit === 'г')) {
+        rem = Math.round(remRaw * prodNetQty);
+        unitStr = 'г';
+        packCount = remRaw;
+        packSize = prodNetQty;
+        weightGrams = rem;
+      }
+      // If product has net volume in ml (e.g. cream 200ml, energy drink 449ml, water 1.5l)
+      else if (prodNetQty && (prodNetUnit === 'ml' || prodNetUnit === 'мл' || prodNetUnit === 'l' || prodNetUnit === 'л')) {
+        rem = prodNetUnit.startsWith('l') || prodNetUnit.startsWith('л') ? Math.round(remRaw * prodNetQty * 1000) : Math.round(remRaw * prodNetQty);
+        unitStr = 'мл';
+        packCount = remRaw;
+        packSize = prodNetQty;
+      }
+      else {
+        rem = Math.round(remRaw);
+        unitStr = 'шт';
+        if (pieceWeight && pieceWeight > 0) {
+          weightGrams = rem * pieceWeight;
+        }
+      }
+    }
+    
+    const pack = packSize || (p.net_quantity ? parseFloat(p.net_quantity) : (unitStr === 'г' ? rem : 1));
+    
+    let per100 = null;
+    if (p.kcal_per_100 !== null && p.kcal_per_100 !== undefined) {
+      per100 = {
+        k: parseFloat(p.kcal_per_100) || 0,
+        p: parseFloat(p.protein_per_100) || 0,
+        f: parseFloat(p.fat_per_100) || 0,
+        c: parseFloat(p.carbs_per_100) || 0
+      };
+    }
+    
+    const q = p.nutrition_status === 'verified' ? 'ok' : (p.nutrition_status === 'estimated' ? 'est' : 'pending');
+    const exp = lot.days_to_expiry !== null && lot.days_to_expiry !== undefined ? lot.days_to_expiry : 10;
+    
+    const tags = [];
+    const lower = (name + ' ' + (lot.display_name || '')).toLowerCase();
+    if (/творог|йогурт|молок|сыр|сливк|кефир|масло сливочн/.test(lower)) tags.push('Молочные');
+    if (/индейк|куриц|мяс|рыб|бедро|яйц|чечевиц|азу|филе|протеин/.test(lower)) tags.push('Белковые');
+    if (/овощ|лук|брокколи|смесь|чеснок|помидор|томат|огур/.test(lower)) tags.push('Овощи');
+    if (!per100) tags.push('Без БЖУ');
+    
+    let icon = '📦';
+    if (/творог/.test(lower)) icon = '🥣';
+    else if (/сыр/.test(lower)) icon = '🧀';
+    else if (/йогурт/.test(lower)) icon = '🍧';
+    else if (/сливк|молок|кефир/.test(lower)) icon = '🥛';
+    else if (/сметан/.test(lower)) icon = '🥣';
+    else if (/шницель|куриц|индейк|азу|мяс|филе/.test(lower)) icon = '🍗';
+    else if (/чечевиц/.test(lower)) icon = '🥣';
+    else if (/гречк/.test(lower)) icon = '🍲';
+    else if (/томат|помидор/.test(lower)) icon = '🍅';
+    else if (/брокколи/.test(lower)) icon = '🥦';
+    else if (/капуст/.test(lower)) icon = '🥬';
+    else if (/овощ|смесь/.test(lower)) icon = '🥗';
+    else if (/лук/.test(lower)) icon = '🧅';
+    else if (/яйц/.test(lower)) icon = '🥚';
+    else if (/яблок/.test(lower)) icon = '🍎';
+    else if (/лимон/.test(lower)) icon = '🍋';
+    else if (/ежевик|голубик|ягод|клубник/.test(lower)) icon = '🫐';
+    else if (/морожен/.test(lower)) icon = '🍦';
+    else if (/сырок/.test(lower)) icon = '🧁';
+    else if (/круассан|бурэкас|треугольник|выпечк|коржи/.test(lower)) icon = '🥐';
+    else if (/лепешк|блин/.test(lower)) icon = '🥞';
+    else if (/чак-чак|козинак|халва/.test(lower)) icon = '🍯';
+    else if (/сухарик/.test(lower)) icon = '🥨';
+    else if (/шоколад|twix|батончик|конфет|драже|skittles|m&m/.test(lower)) icon = '🍫';
+    else if (/сэндвич/.test(lower)) icon = '🥪';
+    else if (/френч-дог|сосиск/.test(lower)) icon = '🌭';
+    else if (/картофел/.test(lower)) icon = '🍟';
+    else if (/чай|greenfield|curtis/.test(lower)) icon = '🫖';
+    else if (/кола|напит|сок/.test(lower)) icon = '🥤';
+    else if (/сахар/.test(lower)) icon = '🧂';
+    else if (/масло/.test(lower)) icon = '🫒';
+    else if (/майонез/.test(lower)) icon = '🍶';
+    else if (/жвачк|mentos|pure fresh/.test(lower)) icon = '🍬';
+    
+    const purchaseDate = lot.purchased_at ? new Date(lot.purchased_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) : '';
+    
+    return {
+      id: lot.id,
+      lot_id: lot.id,
+      product_id: lot.product_id,
+      name,
+      short,
+      nom: name,
+      instr: name.toLowerCase(),
+      receipt: lot.display_name,
+      unit: unitStr,
+      pack,
+      packCount,
+      packSize,
+      avail: rem,
+      pieceWeight,
+      weightGrams,
+      estPieces,
+      per100,
+      q,
+      exp,
+      tags: tags.length ? tags : ['Разное'],
+      icon,
+      image_url: p.image_url,
+      lots: [{ qty: rem + ' ' + unitStr + (estPieces ? ' (≈ ' + estPieces + ' шт.)' : (packCount && packCount > 1 ? ' (' + packCount + ' уп.)' : '')), meta: 'куплено ' + purchaseDate + (lot.expires_at ? ' · годен до ' + new Date(lot.expires_at).toLocaleDateString('ru-RU') : '') }]
+    };
+  }
+
+  mapBackendBatch(b) {
+    const containers = (b.containers || []).map((c, idx) => {
+      const isConsumed = c.status === 'consumed' || (c.remaining_weight_g !== undefined && parseFloat(c.remaining_weight_g) <= 0);
+      return {
+        id: c.id,
+        n: idx + 1,
+        w: parseFloat(c.net_weight_g) || 300,
+        left: isConsumed ? 0 : 1,
+        code: c.public_code || ('MP' + String(idx + 1).padStart(2, '0')),
+        kcal: parseFloat(c.kcal) || 0,
+        protein: parseFloat(c.protein) || 0,
+        fat: parseFloat(c.fat) || 0,
+        carbs: parseFloat(c.carbs) || 0,
+        status: isConsumed ? 'consumed' : (c.status || 'ready')
+      };
+    });
+    
+    const totals = {
+      g: parseFloat(b.cooked_yield_g) || (containers.reduce((a, x) => a + x.w, 0)),
+      k: parseFloat(b.total_kcal) || 0,
+      p: parseFloat(b.total_protein) || 0,
+      f: parseFloat(b.total_fat) || 0,
+      c: parseFloat(b.total_carbs) || 0
+    };
+    
+    const prepDate = b.created_at ? 'приготовлено ' + new Date(b.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : 'приготовлено сегодня';
+    
+    return {
+      id: b.id,
+      name: b.name,
+      dateText: prepDate,
+      status: b.status,
+      totals,
+      ing: (b.ingredients || []).map(i => ({ name: i.display_name, amount: i.quantity + ' ' + (i.unit === 'g' ? 'г' : i.unit) })),
+      containers
+    };
+  }
+
+  avail(p){ const s=this.state.stock[p.id]; return s===undefined? p.avail : s; }
+  unitG(p){ return p.unit==='шт' ? (p.pieceG||100) : 1; }
+  grams(p,amt){ return amt*this.unitG(p); }
+  n1(x){ const v=Math.round(x*10)/10; return String(v).replace('.',','); }
+  n0(x){ return String(Math.round(x)); }
+  plural(n,forms){ const a=Math.abs(Math.round(n))%100, b=a%10;
+    if(a>10&&a<20) return forms[2];
+    if(b>1&&b<5) return forms[1];
+    if(b===1) return forms[0];
+    return forms[2]; }
+  pl(n,forms){ return this.n0(n)+' '+this.plural(n,forms); }
+
+  nutriOf(p,amt){ if(!p.per100) return null; const g=this.grams(p,amt)/100, n=p.per100; return {k:n.k*g,p:n.p*g,f:n.f*g,c:n.c*g}; }
+  amtText(p,amt){ return this.n1(amt)+' '+p.unit; }
+
+  selList(){
+    return Object.keys(this.state.sel).map(id=>({p:this.cat.find(x=>x.id===id),amt:this.state.sel[id]})).filter(x=>x.p);
+  }
+
+  totals(){
+    let g=0,k=0,p=0,f=0,c=0,inc=0;
+    for(const s of this.selList()){
+      g+=this.grams(s.p,s.amt);
+      const n=this.nutriOf(s.p,s.amt);
+      if(n){k+=n.k;p+=n.p;f+=n.f;c+=n.c;} else inc++;
+    }
+    return {g,k,p,f,c,inc};
+  }
+
+  yieldNum(){
+    const c=this.state.comp, t=this.totals();
+    const v=parseFloat(String(c&&c.yield||'').replace(',','.'));
+    if(v>0) return v;
+    return Math.round(t.g*0.82);
+  }
+
+  weights(){
+    const c=this.state.comp; if(!c) return [];
+    const y=this.yieldNum();
+    if(c.mode==='equal'){
+      const n=Math.max(1,c.count||4), base=Math.floor(y/n), rem=y-base*n, arr=[];
+      for(let i=0;i<n;i++) arr.push(i<rem?base+1:base);
+      return arr;
+    }
+    if(c.mode==='fixed'){
+      const w=Math.max(50,parseInt(c.fixed,10)||300), n=Math.floor(y/w), arr=[];
+      for(let i=0;i<n;i++) arr.push(w);
+      const rem=y-n*w;
+      if(rem>0&&c.keepRem) arr.push(rem);
+      return arr;
+    }
+    return (c.rows&&c.rows.length)?c.rows:[Math.round(y/4),Math.round(y/4),Math.round(y/4),Math.round(y/4)];
+  }
+
+  contNutri(w,sum){
+    const t=this.totals();
+    if(!sum) return {k:0,p:0,f:0,c:0};
+    const r=w/sum;
+    return {k:t.k*r,p:t.p*r,f:t.f*r,c:t.c*r};
+  }
+
+  dishName(){
+    const c=this.state.comp;
+    if(c&&c.name) return c.name;
+    return this.localName();
+  }
+
+  cleanFoodName(text) {
+    let s = (text || '').toLowerCase();
+    s = s.replace(/[«\"].*?[»\"]/g, '');
+    s = s.replace(/\b\d+(?:[.,]\d+)?\s*(?:%|г|гр|кг|мл|л|шт|пак)\.?\b/gi, '');
+    const brands = ['село зеленое', 'село зелёное', 'epica', 'эпика', 'магнит', 'свежесть', 'м свежесть', 'м кухня', 'мираторг', 'premiere of taste', 'простоквашино', 'домик в деревне', 'глазовская птица', 'landkaas', 'увелка', 'нытвенский', 'planto', 'слобода', 'green ribbon'];
+    for (const b of brands) s = s.split(b).join('');
+    const desc = [/натуральный(?:\s+состав)?(?:\s+без\s+сахара)?/gi, /без\s+сахара/gi, /быстрозамороженн\w*/gi, /замороженн\w*/gi, /стерилизованн\w*/gi, /питьев\w*/gi, /столов\w*/gi, /колот\w*/gi, /ядрица/gi, /экстра/gi, /новый\s+урожай/gi, /в\s+собственном\s+соку/gi, /соцветиями/gi, /охлажденн\w*/gi, /охл\.?/gi, /с\s+мясом/gi];
+    for (const d of desc) s = s.replace(d, '');
+    s = s.replace(/[^а-яa-z\s-]/gi, '').replace(/\s+/g, ' ').trim();
+
+    if (s.indexOf('творог') >= 0) return 'Творог';
+    if (s.indexOf('йогурт') >= 0) return 'Йогурт';
+    if (s.indexOf('чечевиц') >= 0) return 'Чечевица';
+    if (s.indexOf('индейк') >= 0 || s.indexOf('азу') >= 0) return 'Индейка';
+    if (s.indexOf('шницель') >= 0) return 'Куриный шницель';
+    if (s.indexOf('гречк') >= 0 || s.indexOf('гречнев') >= 0) return 'Гречка';
+    if (s.indexOf('брокколи') >= 0) return 'Брокколи';
+    if (s.indexOf('карибск') >= 0 || s.indexOf('смесь') >= 0) return 'Овощи';
+    if (s.indexOf('томат') >= 0) return 'Томаты';
+    if (s.indexOf('ежевик') >= 0) return 'Ежевика';
+    if (s.indexOf('яблок') >= 0) return 'Яблоки';
+    if (s.indexOf('яйц') >= 0) return 'Яйца';
+    if (s.indexOf('сметан') >= 0) return 'Сметана';
+    if (s.indexOf('кефир') >= 0) return 'Кефир';
+    if (s.indexOf('сыр') >= 0) return 'Сыр';
+
+    const words = s.split(' ');
+    return words[0] ? (words[0].charAt(0).toUpperCase() + words[0].slice(1)) : 'Блюдо';
+  }
+
+  localName(){
+    const l = this.selList().slice().sort((a,b) => this.grams(b.p,b.amt) - this.grams(a.p,a.amt));
+    if (!l.length) return 'Новый милпреп';
+    const cleaned = l.map(x => this.cleanFoodName(x.p.name));
+    if (cleaned.length === 1) return cleaned[0];
+    const c1 = cleaned[0], c2 = cleaned[1];
+    const instrMap = {
+      'творог': 'творогом', 'йогурт': 'йогуртом', 'чечевица': 'чечевицей', 'индейка': 'индейкой',
+      'куриный шницель': 'куриным шницелем', 'гречка': 'гречкой', 'брокколи': 'брокколи',
+      'овощи': 'овощами', 'томаты': 'томатами', 'ежевика': 'ежевикой', 'яблоки': 'яблоками',
+      'яйца': 'яйцом', 'сметана': 'сметаной', 'кефир': 'кефиром', 'сыр': 'сыром'
+    };
+    if ((c1 === 'Творог' && c2 === 'Йогурт') || (c1 === 'Йогурт' && c2 === 'Творог')) {
+      if (cleaned.length > 2) {
+        const c3 = cleaned[2], instr3 = instrMap[c3.toLowerCase()] || c3.toLowerCase();
+        return 'Творог с йогуртом и ' + instr3;
+      }
+      return 'Творог с йогуртом';
+    }
+    if ((c1 === 'Индейка' && c2 === 'Чечевица') || (c1 === 'Чечевица' && c2 === 'Индейка')) {
+      if (cleaned.length > 2 && (cleaned[2] === 'Овощи' || cleaned[2] === 'Томаты' || cleaned[2] === 'Брокколи')) {
+        return 'Индейка с чечевицей и овощами';
+      }
+      return 'Индейка с чечевицей';
+    }
+    const instr2 = instrMap[c2.toLowerCase()] || c2.toLowerCase();
+    if (cleaned.length > 2 && (cleaned[2] === 'Овощи' || cleaned[2] === 'Томаты' || cleaned[2] === 'Брокколи')) {
+      return c1 + ' с ' + instr2 + ' и овощами';
+    }
+    return c1 + ' с ' + instr2;
+  }
+
+  altName(){
+    const ids = this.selList().map(x => x.p.id), base = this.localName();
+    if (base.indexOf('Творог с йогуртом') >= 0) return 'Творожный десерт с йогуртом';
+    if (ids.indexOf('slivki') >= 0) return 'Сливочная ' + base.toLowerCase().replace(/^индейка/,'индейка');
+    const words = base.split(' ');
+    if (words.length <= 2) return base + ' по-домашнему';
+    return 'Домашняя ' + base.toLowerCase();
+  }
+
+  // Action methods
+  go(route){ this.setState({route,sheet:null}); }
+  openDlg(kind,extra){ this.setState({dialog:Object.assign({kind,fields:{},choice:null},extra||{})}); }
+  closeDlg(){ this.setState({dialog:null}); }
+  dlgField(k,v){ const d=this.state.dialog, f=Object.assign({},d.fields); f[k]=v; this.setState({dialog:Object.assign({},d,{fields:f})}); }
+  dlgNum(k,def){ const d=this.state.dialog, v=parseFloat(String(d.fields[k]===undefined?def:d.fields[k]).replace(',','.')); return isNaN(v)?0:v; }
+
+  openAmount(id, mode = 'prep'){
+    const p=this.cat.find(x=>x.id===id), cur=this.state.sel[id];
+    const defAmt = mode === 'consume'
+      ? (p.unit === 'шт' ? 1 : Math.min(this.avail(p), p.pieceWeight || p.pack || 100))
+      : (cur !== undefined ? cur : (p.unit === 'шт' ? 1 : Math.min(this.avail(p), p.pack || 100)));
+    this.setState({
+      sheet: { kind: 'amount', id, mode },
+      sheetCustom: String(defAmt)
+    });
+  }
+
+  setAmount(id,amt){
+    const p=this.cat.find(x=>x.id===id), a=Math.min(Math.max(amt,0),this.avail(p)), sel=Object.assign({},this.state.sel);
+    if(a<=0) delete sel[id]; else sel[id]=a;
+    this.setState({sel,sheet:null}, () => this.saveDraft());
+  }
+
+  toggleSel(id){
+    if(this.state.sel[id]!==undefined) {
+      this.setAmount(id, 0);
+    } else {
+      const p = this.cat.find(x => x.id === id);
+      const full = p ? this.avail(p) : 1;
+      this.setAmount(id, full);
+    }
+  }
+
+  async startComposer(){
+    if(!Object.keys(this.state.sel).length) return;
+    const compState = this.state.comp || {
+      step: 1, name: this.localName(), alt: null, hermes: 'idle',
+      photo: false, yield: '', mode: 'equal', count: 4, fixed: 300, keepRem: true, rows: []
+    };
+    this.setState({ route: 'composer', sheet: null, saveError: false, comp: compState }, () => this.saveDraft());
+
+    // Create reservation batch in backend API
+    try {
+      const payload = {
+        idempotency_key: 'mp-' + Date.now(),
+        name: compState.name,
+        ingredients: this.selList().map(s => ({
+          lot_id: s.p.lot_id || s.p.id,
+          quantity: s.amt,
+          unit: s.p.unit === 'г' ? 'g' : (s.p.unit === 'мл' ? 'ml' : 'pcs')
+        }))
+      };
+      const res = await fetch(this.apiBase + '/meal-prep/batches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User-Id': this.ownerId },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const b = await res.json();
+        this.setState({ comp: Object.assign({}, this.state.comp, { backendBatchId: b.id }) }, () => this.saveDraft());
+      }
+    } catch (e) {
+      console.warn('Backend batch reservation error (offline mode active):', e);
+    }
+  }
+
+  step(n){ this.setState({comp:Object.assign({},this.state.comp,{step:n})}, () => this.saveDraft()); }
+
+  async magic(){
+    const c = this.state.comp;
+    this.setState({ comp: Object.assign({}, c, { name: this.localName(), alt: null, hermes: 'loading' }) });
+    
+    // Call backend name suggestion if batch ID is available
+    if (c && c.backendBatchId) {
+      try {
+        const res = await fetch(this.apiBase + '/meal-prep/batches/' + c.backendBatchId + '/suggest-name', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-User-Id': this.ownerId },
+          body: JSON.stringify({ mode: 'hermes' })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          this.setState({ comp: Object.assign({}, this.state.comp, { name: data.name, hermes: 'done', alt: this.altName() }) }, () => this.saveDraft());
+          return;
+        }
+      } catch (e) {
+        console.warn('Hermes suggest-name call error:', e);
+      }
+    }
+
+    clearTimeout(this._t);
+    this._t = setTimeout(() => {
+      const cc = this.state.comp; if (!cc) return;
+      this.setState({ comp: Object.assign({}, cc, { hermes: 'done', alt: this.altName() }) }, () => this.saveDraft());
+    }, 1000);
+  }
+
+  setMode(mode){
+    const c=this.state.comp;
+    let rows=c.rows;
+    if(mode==='custom'){
+      const y=this.yieldNum(), n=Math.max(1,c.count||4), base=Math.floor(y/n);
+      rows=[]; for(let i=0;i<n;i++) rows.push(i===n-1? y-base*(n-1):base);
+    }
+    this.setState({comp:Object.assign({},c,{mode,rows})}, () => this.saveDraft());
+  }
+
+  setRow(i,v){
+    const c=this.state.comp, rows=(c.rows||[]).slice();
+    rows[i]=Math.max(0,parseInt(String(v).replace(/\D/g,''),10)||0);
+    this.setState({comp:Object.assign({},c,{rows})}, () => this.saveDraft());
+  }
+
+  fixDiff(){
+    const c=this.state.comp, y=this.yieldNum(), rows=this.weights().slice();
+    const sum=rows.reduce((a,b)=>a+b,0);
+    rows[rows.length-1]=Math.max(0,rows[rows.length-1]+(y-sum));
+    this.setState({comp:Object.assign({},c,{mode:'custom',rows}),toast:{text:'Разница добавлена в последний контейнер: '+rows[rows.length-1]+' г'}}, () => this.saveDraft());
+  }
+
+  async save(print){
+    const c=this.state.comp, ws=this.weights(), sum=ws.reduce((a,b)=>a+b,0), t=this.totals();
+    
+    // Ensure backend batch exists
+    let batchId = c && c.backendBatchId;
+    if (!batchId && c) {
+      try {
+        const payload = {
+          idempotency_key: 'mp-' + Date.now(),
+          name: this.dishName(),
+          ingredients: this.selList().map(s => ({
+            lot_id: s.p.lot_id || s.p.id,
+            quantity: s.amt,
+            unit: s.p.unit === 'г' ? 'g' : (s.p.unit === 'мл' ? 'ml' : 'pcs')
+          }))
+        };
+        const res = await fetch(this.apiBase + '/meal-prep/batches', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-User-Id': this.ownerId },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const b = await res.json();
+          batchId = b.id;
+        }
+      } catch (e) {
+        console.warn('Backend batch create on save error:', e);
+      }
+    }
+
+    let savedId = batchId;
+    if (batchId) {
+      try {
+        // 1. Update dish name with user's custom name
+        await fetch(this.apiBase + '/meal-prep/batches/' + batchId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'X-User-Id': this.ownerId },
+          body: JSON.stringify({ name: this.dishName(), name_source: 'user' })
+        });
+
+        // 2. Set portions plan
+        const portionPayload = {
+          mode: c.mode === 'equal' ? 'equal' : (c.mode === 'fixed' ? 'fixed' : 'custom'),
+          cooked_yield_g: sum,
+          container_count: c.mode === 'equal' ? c.count : undefined,
+          fixed_net_weight_g: c.mode === 'fixed' ? parseInt(c.fixed, 10) : undefined,
+          include_remainder: c.keepRem !== false,
+          portions: c.mode === 'custom' ? ws.map(w => ({ net_weight_g: w })) : [],
+          tare_weight_g: 0
+        };
+        await fetch(this.apiBase + '/meal-prep/batches/' + batchId + '/portions', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-User-Id': this.ownerId },
+          body: JSON.stringify(portionPayload)
+        });
+
+        // 3. Finalize batch
+        await fetch(this.apiBase + '/meal-prep/batches/' + batchId + '/finalize', {
+          method: 'POST',
+          headers: { 'X-User-Id': this.ownerId }
+        });
+      } catch (e) {
+        console.warn('Backend save/finalize error:', e);
+      }
+    }
+
+    // Local storage backup
+    const stock=Object.assign({},this.state.stock);
+    for(const s of this.selList()) stock[s.p.id]=Math.max(0,this.avail(s.p)-s.amt);
+    const batch={
+      id: savedId || ('b'+Date.now()),
+      name: this.dishName(),
+      dateText: 'приготовлено сегодня',
+      totals: {g:sum, k:t.k, p:t.p, f:t.f, c:t.c},
+      ing: this.selList().map(s=>({name:s.p.name, amount:this.amtText(s.p,s.amt)})),
+      containers: ws.map((w,i)=>({n:i+1, w, left:1, code:'MP'+String(i+1).padStart(2,'0')}))
+    };
+    const newBatches = [batch].concat(this.state.batches.filter(b => b.id !== batch.id));
+    try { localStorage.setItem('fridge_saved_batches', JSON.stringify(newBatches)); } catch(e) {}
+
+    // Clear draft ONLY after save is complete
+    this.clearDraft();
+
+    await this.loadInventory();
+    await this.loadBatches();
+    this.setState({
+      route:'preps', stock, sel:{}, comp:null, batches:newBatches,
+      toast:{text:'Милпреп «'+batch.name+'» сохранён! Продукты списаны.'},
+      label:print?{batchId:batch.id,cIdx:0,many:ws.length}:null
+    });
+  }
+
+  async cancelComposer() {
+    this.clearDraft();
+    const c = this.state.comp;
+    if (c && c.backendBatchId) {
+      try {
+        await fetch(this.apiBase + '/meal-prep/batches/' + c.backendBatchId + '/cancel', {
+          method: 'POST',
+          headers: { 'X-User-Id': this.ownerId }
+        });
+        await this.loadInventory();
+      } catch (e) {
+        console.warn('Backend cancel error:', e);
+      }
+    }
+    this.go('fridge');
+  }
+
+  renderVals(){
+    const st=this.state, demo=this.props.demoState||'нет';
+    const t=this.totals(), selCount=Object.keys(st.sel).length;
+    const v={};
+    v.stop=(e)=>e&&e.stopPropagation();
+
+    // Backend status badge
+    v.backendOnline = st.backendOnline;
+    v.backendDotS = {
+      width:'8px', height:'8px', borderRadius:'50%',
+      background: st.backendOnline ? '#1E5B3C' : '#C27803',
+      flex:'none'
+    };
+    v.backendStatusText = st.backendOnline ? 'API :8011 онлайн' : 'Офлайн (локально)';
+    v.onRefreshBackend = () => { this.initBackend(); this.setState({ toast: { text: 'Данные обновлены из бэкенда' } }); };
+
+    // Navigation
+    v.onFridge=()=>this.go('fridge'); v.onPreps=()=>this.go('preps'); v.onAdd=()=>this.go('add');
+    v.isFridge=st.route==='fridge'; v.isPreps=st.route==='preps'; v.isAdd=st.route==='add'; v.isComposer=st.route==='composer';
+    
+    const navBtnS=(act)=>({
+      border:'none',borderRadius:'9px',padding:'7px 14px',cursor:'pointer',fontSize:'13.5px',
+      fontWeight:act?'600':'500',background:act?'#FAF9F5':'transparent',color:act?'#1A1917':'#56534C',
+      boxShadow:act?'0 1px 2px rgba(26,25,23,0.08)':'none'
+    });
+    v.navFridgeS=navBtnS(st.route==='fridge'||st.route==='composer');
+    v.navPrepsS=navBtnS(st.route==='preps');
+    v.navAddS=navBtnS(st.route==='add');
+
+    const emptyFridge = demo==='пустой холодильник';
+    const live=this.cat.filter(p=>!emptyFridge);
+    
+    // RECONCILED HEADER COUNTERS
+    const endedCount=live.filter(p=>this.avail(p)<=0).length;
+    const availCount=live.filter(p=>this.avail(p)>0).length;
+    const urgentCount=live.filter(p=>p.exp<=2&&this.avail(p)>0).length;
+    v.headerCount=emptyFridge?'нет продуктов':(this.pl(availCount,['продукт','продукта','продуктов'])+' в наличии'+(urgentCount>0?' · '+this.pl(urgentCount,['срочный','срочных','срочных']):''));
+    v.subCount=emptyFridge?'Пока пусто':(availCount+' доступно'+(endedCount>0?' · '+endedCount+' закончилось':'')+(selCount>0?' · выбрано '+selCount:''));
+    v.selCountText=this.pl(selCount,['позиция','позиции','позиций']);
+
+    // Filters
+    const chipDefs=[
+      {id:'Все',label:'Все'},
+      {id:'Скоро испортится',label:'Срочно'+(urgentCount>0?' ('+urgentCount+')':'')},
+      {id:'Белковые',label:'Белковые'},
+      {id:'Овощи',label:'Овощи'},
+      {id:'Молочные',label:'Молочные'},
+      {id:'Без БЖУ',label:'Без БЖУ'},
+      {id:'Закончились',label:'Закончились'+(endedCount>0?' ('+endedCount+')':'')}
+    ];
+    v.chips=chipDefs.map(def=>{
+      const act=st.chip===def.id;
+      return {
+        label:def.label,
+        s:{
+          border:act?'1.5px solid #1A1917':'1px solid #D5D0C5',
+          background:act?'#FAF9F5':'#EDE8DF',
+          color:act?'#1A1917':'#56534C',
+          borderRadius:'8px',padding:'6px 12px',cursor:'pointer',fontSize:'13px',fontWeight:act?'600':'500'
+        },
+        on:()=>this.setState({chip:def.id})
+      };
+    });
+
+    v.q=st.q; v.hasQuery=!!st.q;
+    v.onQuery=(e)=>this.setState({q:e.target.value});
+    v.onClearQuery=()=>this.setState({q:''});
+    v.onResetFilters=()=>this.setState({q:'',chip:'Все'});
+
+    // Filter list
+    let filtered=live.filter(p=>{
+      const a=this.avail(p);
+      const isEnded=a<=0;
+      if(st.q && p.name.toLowerCase().indexOf(st.q.toLowerCase())<0) return false;
+      
+      // If "Закончились" tab is selected, show ONLY ended products
+      if(st.chip==='Закончились') return isEnded;
+      
+      // For all active stock tabs: HIDE completely used up items!
+      if(isEnded) return false;
+
+      if(st.chip==='Скоро испортится') return p.exp<=2;
+      if(st.chip==='Без БЖУ') return !p.per100;
+      if(st.chip!=='Все') return p.tags.indexOf(st.chip)>=0;
+      return true;
+    });
+
+    v.showSkeletons=demo==='скелетоны';
+    v.skeletons=[1,2,3,4];
+    v.showEmptyFridge=emptyFridge;
+    v.showNoResults=!emptyFridge&&demo!=='скелетоны'&&filtered.length===0;
+    v.showGrid=!emptyFridge&&demo!=='скелетоны'&&filtered.length>0;
+
+    // NATURAL URGENCY GROUPS
+    const gUrgent = filtered.filter(p=>p.exp<=2);
+    const gWeek   = filtered.filter(p=>p.exp>=3 && p.exp<=7);
+    const gFresh  = filtered.filter(p=>p.exp>7);
+
+    const makeItem=(p)=>{
+      const a=this.avail(p), sel=st.sel[p.id], isSel=sel!==undefined, isEnded=a<=0, out=isEnded||p.exp<0;
+      
+      let leftBorder='#D5D0C5';
+      let expColor='#56534C';
+      let expText='';
+
+      if(isEnded){
+        leftBorder='#8A857B'; expColor='#8A857B'; expText='закончился';
+      } else if(p.exp<0){
+        leftBorder='#8A857B'; expColor='#8A857B'; expText='просрочено';
+      } else if(p.exp<=2){
+        leftBorder='#C27803'; expColor='#B45309'; expText=p.exp===0?'до сегодня':(p.exp===1?'до завтра':'за '+p.exp+' дня');
+      } else {
+        expText='годен '+p.exp+' дн.';
+      }
+
+      const rowBg = isEnded ? '#F4F2EC' : '#FAF9F5';
+      const rowOutline = isSel ? '2px solid #1A1917' : 'none';
+
+      let nutriKcal='— ккал', nutriPfc='КБЖУ уточняется';
+      if(p.per100){
+        const prefix = p.q==='est'?'≈ ':'';
+        nutriKcal = prefix + this.n0(p.per100.k)+' ккал';
+        nutriPfc = prefix + 'Б '+this.n1(p.per100.p)+' · Ж '+this.n1(p.per100.f)+' · У '+this.n1(p.per100.c);
+      }
+
+      let availText = '';
+      if (isEnded) {
+        availText = '0 ' + p.unit + ' (закончился)';
+      } else if (p.unit === 'г') {
+        if (p.estPieces || (p.pieceWeight && p.pieceWeight > 0)) {
+          const pcs = p.estPieces || Math.max(1, Math.round(a / p.pieceWeight));
+          availText = this.n0(a) + ' г (≈ ' + pcs + ' шт.)';
+        } else if (p.packCount && p.packSize) {
+          availText = this.n0(a) + ' г (' + p.packCount + ' уп.)';
+        } else {
+          availText = this.n0(a) + ' г';
+        }
+      } else if (p.unit === 'шт') {
+        if (p.weightGrams || (p.pieceWeight && p.pieceWeight > 0)) {
+          const wg = p.weightGrams || Math.round(a * p.pieceWeight);
+          availText = a + ' шт. (≈ ' + this.n0(wg) + ' г)';
+        } else {
+          availText = a + ' шт.';
+        }
+      } else {
+        availText = this.n0(a) + ' ' + p.unit;
+      }
+
+      const lotMeta = (p.lots&&p.lots[0])? p.lots[0].meta : '';
+
+      const hasImg = Boolean(p.image_url);
+      return {
+        id:p.id, name:p.name, icon:p.icon||'📦',
+        hasImage:hasImg, image_url:p.image_url||'', noImage:!hasImg,
+        availText,
+        lotMeta, nutriKcal, nutriPfc,
+        isEstimated: p.q==='est', isPending: p.q==='pending',
+        expText,
+        expS:{color:expColor,fontSize:'12px',fontWeight:p.exp<=2&&!isEnded?'600':'400'},
+        selected:isSel,
+        selAmtText: isSel? (this.n0(sel)+' '+p.unit):'',
+        rowS:{
+          display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',
+          borderBottom:'1px solid #EAE6DD',background:rowBg,
+          borderLeft:'3px solid '+leftBorder,outline:rowOutline,outlineOffset:'-1px',
+          cursor:out?'default':'pointer',opacity:out?0.6:1
+        },
+        checkS:{
+          width:'20px',height:'20px',borderRadius:'50%',flex:'none',
+          border:'1.5px solid '+(isSel?'#1A1917':'#C9C4B7'),
+          background:isSel?'#1A1917':'transparent',color:'#FAF9F5',
+          display:'flex',alignItems:'center',justifyContent:'center',cursor:isEnded?'default':'pointer'
+        },
+        thumbS:{
+          width:'40px',height:'40px',borderRadius:'8px',background:'#EDE8DF',
+          border:'1px solid #D5D0C5',display:'flex',alignItems:'center',justifyContent:'center',flex:'none',overflow:'hidden'
+        },
+        onRowClick:()=>{ if(!out) this.toggleSel(p.id); else this.setState({sheet:{kind:'product',id:p.id}}); },
+        onContextMenu:(e)=>{ if(!out) this.openContextMenu(e, p.id); },
+        onToggle:(e)=>{ e.stopPropagation(); if(!out) this.toggleSel(p.id); },
+        onOpenAmount:(e)=>{ e.stopPropagation(); if(!isEnded) this.openAmount(p.id); },
+        onDetail:(e)=>{ e.stopPropagation(); this.setState({sheet:{kind:'product',id:p.id}}); },
+        onKey:(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); if(!out) this.toggleSel(p.id); } }
+      };
+    };
+
+    const groupList=[];
+    if (st.chip==='Закончились') {
+      if(filtered.length) {
+        groupList.push({
+          title:'Закончившиеся продукты',
+          count:filtered.length,
+          indicatorDotS:{width:'8px',height:'8px',borderRadius:'50%',background:'#8A857B'},
+          items:filtered.map(makeItem)
+        });
+      }
+    } else {
+      if(gUrgent.length) groupList.push({title:'Срочно: сегодня и завтра',count:gUrgent.length,indicatorDotS:{width:'8px',height:'8px',borderRadius:'50%',background:'#C27803'},items:gUrgent.map(makeItem)});
+      if(gWeek.length)   groupList.push({title:'На этой неделе',count:gWeek.length,indicatorDotS:{width:'8px',height:'8px',borderRadius:'50%',background:'#8A857B'},items:gWeek.map(makeItem)});
+      if(gFresh.length)  groupList.push({title:'Свежее и длительное хранение',count:gFresh.length,indicatorDotS:{width:'8px',height:'8px',borderRadius:'50%',background:'#D5D0C5'},items:gFresh.map(makeItem)});
+    }
+    v.groups=groupList;
+
+    // Bottom Selection Tray
+    v.hasSelection=selCount>0;
+    v.selCount=selCount;
+    v.trayCount='Выбрано '+this.pl(selCount,['продукт','продукта','продуктов']);
+    v.trayLine=this.n0(t.g)+' г всего · '+this.n0(t.k)+' ккал (Б '+this.n0(t.p)+' · Ж '+this.n0(t.f)+' · У '+this.n0(t.c)+')';
+    v.trayIcons=this.selList().slice(0,6).map(s=>({
+      hasImage:Boolean(s.p.image_url), image_url:s.p.image_url||'', noImage:!s.p.image_url, icon:s.p.icon||'📦'
+    }));
+    v.onClearSel=()=>this.openDlg('clearSel');
+    v.onConsumeSel=()=>this.consumeSelected();
+    v.onCook=()=>this.startComposer();
+    v.createDisabled=selCount===0;
+    v.createS={
+      background:selCount?'#1E5B3C':'#C9C4B7',color:'#FAF9F5',border:'none',
+      borderRadius:'10px',padding:'12px 20px',fontWeight:'600',fontSize:'14.5px',
+      cursor:selCount?'pointer':'not-allowed',display:'flex',gap:'8px',alignItems:'center'
+    };
+
+    // Context menu properties
+    const ctx = st.ctxMenu;
+    v.hasContextMenu = Boolean(ctx);
+    if (ctx) {
+      const ctxProd = this.cat.find(x => x.id === ctx.id);
+      v.contextMenuTitle = ctxProd ? ctxProd.name : 'Действия с продуктом';
+      v.ctxAvailText = ctxProd ? (this.n0(this.avail(ctxProd)) + ' ' + ctxProd.unit) : '';
+      v.ctxHasMultiSel = selCount > 1;
+      v.ctxIsSel = Boolean(st.sel[ctx.id]);
+      v.contextMenuStyle = {
+        position: 'fixed',
+        top: ctx.y + 'px',
+        left: ctx.x + 'px',
+        zIndex: 95,
+        background: '#FAF9F5',
+        border: '1px solid #D5D0C5',
+        borderRadius: '12px',
+        boxShadow: '0 8px 30px rgba(26,25,23,0.18)',
+        minWidth: '240px',
+        overflow: 'hidden'
+      };
+      v.onCloseContextMenu = () => this.closeContextMenu();
+      v.onCtxConsumeFull = () => {
+        if (!ctxProd) return;
+        this.consumeLots([{
+          lot_id: ctxProd.lot_id || ctxProd.id,
+          quantity: this.avail(ctxProd),
+          unit: ctxProd.unit === 'г' ? 'g' : (ctxProd.unit === 'мл' ? 'ml' : 'pcs')
+        }], 'consumed');
+      };
+      v.onCtxConsumePart = () => {
+        this.closeContextMenu();
+        if (ctxProd) this.openAmount(ctxProd.id, 'consume');
+      };
+      v.onCtxConsumeAllSel = () => this.consumeSelected();
+      v.onCtxToggleSel = () => {
+        this.closeContextMenu();
+        if (ctxProd) this.toggleSel(ctxProd.id);
+      };
+      v.onCtxDetail = () => {
+        this.closeContextMenu();
+        if (ctxProd) this.setState({ sheet: { kind: 'product', id: ctxProd.id } });
+      };
+      v.onCtxDiscard = () => {
+        if (!ctxProd) return;
+        this.consumeLots([{
+          lot_id: ctxProd.lot_id || ctxProd.id,
+          quantity: this.avail(ctxProd),
+          unit: ctxProd.unit === 'г' ? 'g' : (ctxProd.unit === 'мл' ? 'ml' : 'pcs')
+        }], 'discarded');
+      };
+    }
+
+    // ==================== COMPOSER LOGIC ====================
+    const c=st.comp;
+    if(c){
+      v.step1=c.step===1; v.step2=c.step===2; v.step3=c.step===3; v.step4=c.step===4;
+      v.steps=[['1','Состав'],['2','Блюдо'],['3','Порции'],['4','Готово']].map(([n,label],i)=>{
+        const act=c.step===i+1;
+        return {
+          n,label,on:()=>this.step(i+1),
+          s:{
+            border:act?'1.5px solid #1E5B3C':'1px solid #D5D0C5',
+            background:act?'#1E5B3C':'#FAF9F5',
+            color:act?'#FAF9F5':(c.step>i+1?'#1E5B3C':'#56534C'),
+            borderRadius:'999px',padding:'8px 16px',cursor:'pointer',fontSize:'13.5px',fontWeight:'600',
+            display:'flex',gap:'6px',alignItems:'center'
+          }
+        };
+      });
+
+      v.onExitComposer=()=>this.cancelComposer();
+      v.ing=this.selList().map(s=>{
+        const n=this.nutriOf(s.p,s.amt);
+        const simpleName = s.p.nom || s.p.name.split(',')[0].replace(/«[^»]+»/g, '').trim();
+        const carbsVal = n ? n.c : 0;
+        const carbsPct = t.c > 0 ? Math.round((carbsVal / t.c) * 100) : 0;
+        return {
+          name:s.p.name,
+          shortName: simpleName,
+          carbsVal,
+          carbs: this.n1(carbsVal) + ' г',
+          carbsPct: carbsPct + '%',
+          hasImage:Boolean(s.p.image_url), image_url:s.p.image_url||'', noImage:!s.p.image_url,
+          icon:s.p.icon||'📦',
+          amountText:this.amtText(s.p,s.amt),
+          nutriText:n? this.n0(n.k)+' ккал · Б '+this.n1(n.p)+' · Ж '+this.n1(n.f)+' · У '+this.n1(n.c) : 'нет БЖУ (вес учтён)',
+          onEdit:()=>this.openAmount(s.p.id),
+          onRemove:()=>this.setAmount(s.p.id,0)
+        };
+      });
+
+      // Top Carbs contributors for Step 1
+      v.carbSources = v.ing.filter(i => i.carbsVal > 0).sort((a,b) => b.carbsVal - a.carbsVal);
+      v.showCarbSources = v.step1 && v.carbSources.length > 0;
+      v.showSideIngList = !v.step1;
+
+      v.sumWeight=this.n0(t.g)+' г';
+      v.sumKcal=this.n0(t.k)+' ккал';
+      v.sumCarbsTotal=this.n1(t.c);
+
+      // Step 2 values
+      v.cName=c.name||'';
+      v.onName=(e)=>this.setState({comp:Object.assign({},c,{name:e.target.value})}, () => this.saveDraft());
+      v.onMagic=()=>this.magic();
+      v.hermesLoading=c.hermes==='loading';
+      v.hermesAlt=!!c.alt;
+      v.altNameText=c.alt||'';
+      v.onUseAlt=()=>this.setState({comp:Object.assign({},c,{name:c.alt,alt:null})}, () => this.saveDraft());
+      v.cYield=c.yield||'';
+      v.yieldPlaceholder=String(Math.round(t.g*0.82));
+      v.onYield=(e)=>this.setState({comp:Object.assign({},c,{yield:e.target.value})}, () => this.saveDraft());
+      v.yieldNote='~'+Math.round(t.g*0.82)+' г по умолчанию (расчётная уварка -18%)';
+      v.photoBtnText=c.photo?'Фото загружено ✓':'Добавить фото';
+      v.onUploadPhoto=()=>this.openDlg('photo',{phase:'loading'});
+
+      // Step 3 Portions
+      v.modeEqual=c.mode==='equal'; v.modeFixed=c.mode==='fixed'; v.modeCustom=c.mode==='custom';
+      
+      const modeBtnS=(act)=>({
+        border:act?'1.5px solid #1E5B3C':'1px solid #D5D0C5',
+        background:act?'#FAF9F5':'#EDE8DF',color:act?'#1E5B3C':'#56534C',
+        borderRadius:'10px',padding:'10px',cursor:'pointer',textAlign:'left'
+      });
+      v.modes=[
+        {label:'Поровну',hint:'Одинаковые контейнеры',s:modeBtnS(c.mode==='equal'),on:()=>this.setMode('equal')},
+        {label:'По весу',hint:'Фикс. граммы + остаток',s:modeBtnS(c.mode==='fixed'),on:()=>this.setMode('fixed')},
+        {label:'Разные веса',hint:'Взвешивание каждого',s:modeBtnS(c.mode==='custom'),on:()=>this.setMode('custom')}
+      ];
+
+      const ws=this.weights(), yNum=this.yieldNum();
+      const avgW = ws.length ? Math.round(yNum/ws.length) : 0;
+      const onePortionNutri = this.contNutri(avgW, yNum);
+
+      v.cCount=c.count||4;
+      v.onCountMinus=()=>this.setState({comp:Object.assign({},c,{count:Math.max(1,(c.count||4)-1)})}, () => this.saveDraft());
+      v.onCountPlus=()=>this.setState({comp:Object.assign({},c,{count:(c.count||4)+1})}, () => this.saveDraft());
+      v.equalWeightEach=this.n0(avgW);
+      v.equalHeroCarbs=this.n1(onePortionNutri.c)+' г';
+      v.equalMacroLine=this.n0(onePortionNutri.k)+' ккал · Белки '+this.n1(onePortionNutri.p)+' г · Жиры '+this.n1(onePortionNutri.f)+' г · Углеводы '+this.n1(onePortionNutri.c)+' г';
+
+      v.sideCarbsHero=this.n1(onePortionNutri.c)+' г';
+      v.sidePortionMacro=this.n0(onePortionNutri.k)+' ккал · Б '+this.n1(onePortionNutri.p)+' · Ж '+this.n1(onePortionNutri.f)+' · У '+this.n1(onePortionNutri.c);
+
+      v.cFixed=c.fixed||300;
+      v.onFixed=(e)=>this.setState({comp:Object.assign({},c,{fixed:e.target.value})}, () => this.saveDraft());
+      v.fixedHint=ws.length+' контейнеров';
+      v.hasRemainder=yNum% (parseInt(c.fixed,10)||300) > 0;
+      v.remText='Остаток '+(yNum% (parseInt(c.fixed,10)||300))+' г положить в отдельный контейнер';
+      v.keepRem=c.keepRem!==false;
+      v.onToggleRem=()=>this.setState({comp:Object.assign({},c,{keepRem:!c.keepRem})}, () => this.saveDraft());
+
+      v.rows=ws.map((w,i)=>{
+        const cn=this.contNutri(w,yNum);
+        return {
+          title:'Контейнер '+(i+1), weight:String(w),
+          carbsHero:'У '+this.n1(cn.c)+' г',
+          pfcText:this.n0(cn.k)+' ккал · Б '+this.n1(cn.p)+' · Ж '+this.n1(cn.f),
+          onWeight:(e)=>this.setRow(i,e.target.value),
+          onRemove:()=>this.openDlg('deleteRow',{idx:i})
+        };
+      });
+      v.onAddRow=()=>{
+        const rows=(c.rows||[]).concat([250]);
+        this.setState({comp:Object.assign({},c,{rows})}, () => this.saveDraft());
+      };
+      const customSum=ws.reduce((a,b)=>a+b,0);
+      v.showFix=c.mode==='custom'&&customSum!==yNum;
+      v.onFixDiff=()=>this.fixDiff();
+
+      v.reviewName=this.dishName();
+      v.reviewSub='Выход партии: '+this.n0(yNum)+' г · '+ws.length+' контейнеров';
+      v.perContCarbsHero=this.n1(onePortionNutri.c)+' г';
+      v.perContMacroFull=this.n0(onePortionNutri.k)+' ккал · Б '+this.n1(onePortionNutri.p)+' г · Ж '+this.n1(onePortionNutri.f)+' г · У '+this.n1(onePortionNutri.c)+' г';
+      v.onSave=()=>this.save(false);
+      v.onSavePrint=()=>this.save(true);
+
+      v.prevDisabled=c.step===1;
+      v.prevS={background:'transparent',border:'1px solid #C9C4B7',borderRadius:'10px',padding:'12px 18px',cursor:'pointer',fontWeight:'500',fontSize:'14px',opacity:c.step===1?0.5:1};
+      v.showNext=c.step<4;
+      v.nextLabel=c.step===1?'Далее: Блюдо →':(c.step===2?'Далее: Порции →':'Далее: Проверка →');
+      v.onPrev=()=>this.step(Math.max(1,c.step-1));
+      v.onNext=()=>this.step(Math.min(4,c.step+1));
+    }
+
+    // ==================== SCREEN 3: BATCHES ====================
+    const allBatches = st.batches || [];
+    const activeBatches = allBatches.filter(b => b.containers.some(x => x.left > 0));
+    const freshBatches = allBatches.filter(b => b.containers.filter(x => x.left > 0).length > 1);
+    const endingBatches = allBatches.filter(b => b.containers.filter(x => x.left > 0).length === 1);
+    const eatenBatches = allBatches.filter(b => b.containers.every(x => x.left <= 0));
+
+    let curChip = st.prepChip || 'Все';
+    let filteredBatches = activeBatches;
+    if (curChip === 'Свежие') filteredBatches = freshBatches;
+    else if (curChip === 'Заканчиваются') filteredBatches = endingBatches;
+    else if (curChip === 'Съедены') filteredBatches = eatenBatches;
+    else if (curChip === 'Все') filteredBatches = activeBatches.length > 0 ? activeBatches : allBatches;
+
+    v.prepsSub = this.pl(activeBatches.length, ['партия', 'партии', 'партий']) + ' в наличии' + (eatenBatches.length ? ' · ' + eatenBatches.length + ' съедено' : '');
+
+    const chipList = [
+      { id: 'Все', label: 'В наличии (' + activeBatches.length + ')' },
+      { id: 'Свежие', label: 'Свежие (' + freshBatches.length + ')' },
+      { id: 'Заканчиваются', label: 'Заканчиваются (' + endingBatches.length + ')' },
+      { id: 'Съедены', label: 'Съедены (' + eatenBatches.length + ')' }
+    ];
+
+    v.prepChips = chipList.map(c => ({
+      label: c.label,
+      s: {
+        border: curChip === c.id ? '1.5px solid #1A1917' : '1px solid #D5D0C5',
+        background: curChip === c.id ? '#FAF9F5' : '#EDE8DF',
+        color: curChip === c.id ? '#1A1917' : '#56534C',
+        borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontSize: '13px',
+        fontWeight: curChip === c.id ? '600' : '500'
+      },
+      on: () => this.setState({ prepChip: c.id })
+    }));
+
+    v.hasBatches = filteredBatches.length > 0;
+    v.noBatches = filteredBatches.length === 0;
+    v.batches = filteredBatches.map(b => {
+      const leftCount = b.containers.filter(x => x.left > 0).length;
+      const totalCount = b.containers.length;
+      const leftG = b.containers.reduce((a, x) => a + x.w * x.left, 0);
+      const onePortion = this.contNutriFor(b, { w: Math.round(b.totals.g / (totalCount || 1)) });
+      return {
+        name: b.name,
+        dateText: b.dateText,
+        heroDose: '1 порция: У ' + this.n1(onePortion.c) + ' г · '+ this.n0(onePortion.k) + ' ккал',
+        perText: 'Б ' + this.n1(onePortion.p) + ' г · Ж ' + this.n1(onePortion.f) + ' г',
+        leftText: leftCount + ' из ' + totalCount + ' контейнеров (' + this.n0(leftG) + ' г)',
+        statusText: leftCount === 0 ? 'съедено' : (leftCount <= 1 ? 'заканчивается' : 'свежее'),
+        statusS: {
+          fontSize: '11.5px', padding: '3px 8px', borderRadius: '6px',
+          background: leftCount === 0 ? '#EDE8DF' : (leftCount <= 1 ? '#FBF0DC' : '#EFF4EF'),
+          color: leftCount === 0 ? '#8A857B' : (leftCount <= 1 ? '#B45309' : '#1E5B3C'),
+          fontWeight: '600'
+        },
+        onOpen: () => this.setState({ sheet: { kind: 'batch', id: b.id } })
+      };
+    });
+
+    // ==================== BOTTOM SHEETS ====================
+    v.sheetOpen=!!st.sheet;
+    v.onCloseSheet=()=>this.setState({sheet:null});
+
+    if(st.sheet && st.sheet.kind==='amount'){
+      v.isAmountSheet=true;
+      const p=this.cat.find(x=>x.id===st.sheet.id);
+      const av=this.avail(p);
+      const isConsumeMode = st.sheet.mode === 'consume';
+      v.sheetTitle = isConsumeMode ? ('Сколько съедено: ' + p.name) : p.name;
+      v.sheetFieldLabel = isConsumeMode ? 'Съедено:' : 'В милпреп:';
+      v.sheetAvailText=p.unit==='г'?(p.pieceWeight?(this.n0(av)+' г (≈ '+Math.max(1,Math.round(av/p.pieceWeight))+' шт.)'):(this.n0(av)+' г')):(av+' '+p.unit);
+      v.sheetUnit=p.unit;
+      v.sheetCustom=st.sheetCustom;
+      v.onSheetCustom=(e)=>this.setState({sheetCustom:e.target.value});
+
+      const presets=[];
+      if (p.unit==='г' && p.pieceWeight && p.pieceWeight > 0) {
+        const pw = Math.round(p.pieceWeight);
+        presets.push({ label: '1 шт. (~' + pw + ' г)', s: { background: '#EDE8DF', border: '1px solid #D5D0C5', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }, on: () => this.setState({ sheetCustom: String(Math.min(av, pw)) }) });
+        if (av >= pw * 2) {
+          presets.push({ label: '2 шт. (~' + (pw * 2) + ' г)', s: { background: '#EDE8DF', border: '1px solid #D5D0C5', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }, on: () => this.setState({ sheetCustom: String(Math.min(av, pw * 2)) }) });
+        }
+        presets.push({ label: '100 г', s: { background: '#EDE8DF', border: '1px solid #D5D0C5', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }, on: () => this.setState({ sheetCustom: String(Math.min(av, 100)) }) });
+        presets.push({ label: 'Всё (' + av + ' г)', s: { background: '#EDE8DF', border: '1px solid #D5D0C5', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }, on: () => this.setState({ sheetCustom: String(av) }) });
+      } else if (p.unit==='шт' && p.pieceWeight && p.pieceWeight > 0) {
+        presets.push({ label: '1 шт. (~' + Math.round(p.pieceWeight) + ' г)', s: { background: '#EDE8DF', border: '1px solid #D5D0C5', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }, on: () => this.setState({ sheetCustom: '1' }) });
+        if (av >= 2) presets.push({ label: '2 шт.', s: { background: '#EDE8DF', border: '1px solid #D5D0C5', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }, on: () => this.setState({ sheetCustom: '2' }) });
+        presets.push({ label: 'Всё (' + av + ' шт.)', s: { background: '#EDE8DF', border: '1px solid #D5D0C5', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }, on: () => this.setState({ sheetCustom: String(av) }) });
+      } else {
+        const p100 = p.pack || (p.unit === 'шт' ? 1 : 100);
+        presets.push({ label: p100 + ' ' + p.unit, s: { background: '#EDE8DF', border: '1px solid #D5D0C5', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }, on: () => this.setState({ sheetCustom: String(Math.min(av, p100)) }) });
+        presets.push({ label: 'Всё (' + av + ' ' + p.unit + ')', s: { background: '#EDE8DF', border: '1px solid #D5D0C5', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }, on: () => this.setState({ sheetCustom: String(av) }) });
+      }
+      v.sheetPresets = presets;
+
+      const cAmt = parseFloat(String(st.sheetCustom).replace(',','.'))||0;
+      const nPrv = this.nutriOf(p, cAmt);
+      v.sheetNutriPreview = nPrv? (this.n0(nPrv.k)+' ккал · Б '+this.n1(nPrv.p)+' · Ж '+this.n1(nPrv.f)+' · У '+this.n1(nPrv.c)) : 'БЖУ уточняется';
+      
+      if (isConsumeMode) {
+        v.applyLabel = '🍽 Отметить съеденным (' + this.n1(cAmt) + ' ' + p.unit + ')';
+        v.onApplyAmount = () => {
+          if (cAmt > 0) {
+            this.consumeLots([{
+              lot_id: p.lot_id || p.id,
+              quantity: cAmt,
+              unit: p.unit === 'г' ? 'g' : (p.unit === 'мл' ? 'ml' : 'pcs')
+            }], 'consumed');
+          }
+          this.setState({ sheet: null });
+        };
+      } else {
+        v.applyLabel = st.sel[p.id] !== undefined ? 'Сохранить' : 'Добавить в милпреп';
+        v.onApplyAmount = () => this.setAmount(p.id, cAmt);
+      }
+    } else { v.isAmountSheet=false; }
+
+    if(st.sheet && st.sheet.kind==='product'){
+      v.isProductSheet=true;
+      const p=this.cat.find(x=>x.id===st.sheet.id);
+      v.prodSheetName=p.name;
+      v.prodHasImage=Boolean(p.image_url);
+      v.prodImageUrl=p.image_url||'';
+      v.receiptName=p.receipt;
+      v.prodSheetAvail=this.n0(this.avail(p))+' '+p.unit+' в наличии';
+      v.prodSheetExpText=p.exp<0?'просрочено':('годен '+p.exp+' дн.');
+      v.prodSheetExpS={fontSize:'12px',padding:'3px 8px',borderRadius:'6px',background:p.exp<=2?'#FBF0DC':'#EDE8DF',color:p.exp<=2?'#B45309':'#56534C',fontWeight:'600'};
+      v.sheetBaseUnit=p.unit==='шт'?'г':p.unit;
+      v.sheetNutri=p.per100? (this.n0(p.per100.k)+' ккал · Б '+this.n1(p.per100.p)+' · Ж '+this.n1(p.per100.f)+' · У '+this.n1(p.per100.c)) : 'Нет данных';
+      v.onUseFromDetail=()=>{ this.setState({sheet:null}); this.openAmount(p.id, 'prep'); };
+      v.onEatFromDetail=()=>{ this.setState({sheet:null}); this.openAmount(p.id, 'consume'); };
+      v.onFixData=()=>this.openDlg('kbju',{id:p.id});
+    } else { v.isProductSheet=false; }
+
+    if(st.sheet && st.sheet.kind==='batch'){
+      v.isBatchSheet=true;
+      const b=st.batches.find(x=>x.id===st.sheet.id);
+      v.batchSheetName=b.name;
+      v.batchSub=b.dateText+' · '+b.containers.length+' контейнеров';
+      const onePortion=this.contNutriFor(b,{w:Math.round(b.totals.g/b.containers.length)});
+      v.batchHeroDose='На 1 контейнер: У '+this.n1(onePortion.c)+' г · '+this.n0(onePortion.k)+' ккал';
+      v.batchTotals='Итог партии: '+this.n0(b.totals.g)+' г · '+this.n0(b.totals.k)+' ккал';
+      v.batchContainers=b.containers.map((c2,idx)=>({
+        title:'Контейнер '+c2.n+' ('+this.n0(c2.w)+' г)',
+        meta:c2.left<=0?'съеден':(c2.left<1?'осталась половина':'полный'),
+        isConsumed:c2.left<=0,
+        isAvailable:c2.left>0,
+        onLabel:()=>this.openContainerLabel(b, c2),
+        onGluco:()=>this.openDlg('gluco',{id:b.id,cIdx:idx}),
+        onWriteoff:()=>this.openDlg('writeoffContainer',{id:b.id,cIdx:idx})
+      }));
+      v.onRenameBatch=()=>this.openDlg('renameBatch',{id:b.id,fields:{name:b.name}});
+      v.onPrintBatch=()=>{ this.setState({sheet:null,label:{batchId:b.id,cIdx:0,many:b.containers.length}}); };
+    } else { v.isBatchSheet=false; }
+
+    // ==================== THERMAL LABEL PREVIEW ====================
+    v.labelOpen=!!st.label;
+    v.onCloseLabel=()=>this.setState({label:null});
+    if(st.label){
+      const b=st.batches.find(x=>x.id===st.label.batchId);
+      const c2=(b&&b.containers[st.label.cIdx||0])||{n:1,w:300,code:'GT:C:01'};
+      const cn=b?this.contNutriFor(b,c2):{k:120,p:10,f:2,c:24};
+      v.labelDishName=b?b.name:'Милпреп';
+      v.labelDate=new Date().toLocaleDateString('ru-RU');
+      v.labelContNum=c2.n+'/'+(b?b.containers.length:1);
+      v.labelCarbs=this.n1(cn.c);
+      v.labelKcal=this.n0(cn.k);
+      v.labelWeight=this.n0(c2.w);
+      v.labelPfc='Б '+this.n1(cn.p)+' г · Ж '+this.n1(cn.f)+' г';
+      v.labelCode=c2.code || 'GT:C:MP01';
+      v.onDoPrint=()=>this.setState({label:null,toast:{text:'Этикетка отправлена на печать'}});
+    }
+
+    // ==================== MODAL DIALOGS ====================
+    v.dialogOpen=!!st.dialog;
+    v.onCloseDlg=()=>this.closeDlg();
+    if(st.dialog){
+      const d=st.dialog;
+      v.dlgTitle=''; v.dlgText=''; v.hasDlgFields=false; v.hasDlgOptions=false; v.dlgConfirmLabel='Подтвердить';
+      
+      if(d.kind==='clearSel'){
+        v.dlgTitle='Очистить выбор продуктов?';
+        v.dlgText='Все выбранные позиции будут сброшены.';
+        v.dlgConfirmLabel='Очистить';
+        v.onDlgConfirm=()=>this.setState({sel:{},dialog:null});
+      }
+
+      if(d.kind==='kbju'){
+        const p=this.cat.find(x=>x.id===d.id), n=p.per100||{k:0,p:0,f:0,c:0};
+        v.dlgTitle='Уточнить КБЖУ на 100 г';
+        v.dlgText='Данные сохранятся в базе продуктов.';
+        v.hasDlgFields=true;
+        v.dlgFields=[
+          {label:'Калории (ккал)',unit:'ккал',value:d.fields.k===undefined?String(n.k):d.fields.k,on:(e)=>this.dlgField('k',e.target.value)},
+          {label:'Белки (г)',unit:'г',value:d.fields.p===undefined?String(n.p):d.fields.p,on:(e)=>this.dlgField('p',e.target.value)},
+          {label:'Жиры (г)',unit:'г',value:d.fields.f===undefined?String(n.f):d.fields.f,on:(e)=>this.dlgField('f',e.target.value)},
+          {label:'Углеводы (г)',unit:'г',value:d.fields.c===undefined?String(n.c):d.fields.c,on:(e)=>this.dlgField('c',e.target.value)}
+        ];
+        v.dlgConfirmLabel='Сохранить';
+        v.onDlgConfirm=()=>{
+          p.per100={k:this.dlgNum('k',n.k),p:this.dlgNum('p',n.p),f:this.dlgNum('f',n.f),c:this.dlgNum('c',n.c)};
+          p.q='ok';
+          this.setState({dialog:null,toast:{text:'КБЖУ для '+p.short+' сохранён'}});
+        };
+      }
+
+      if(d.kind==='renameBatch'){
+        const b=st.batches.find(x=>x.id===d.id);
+        v.dlgTitle='Переименовать милпреп';
+        v.dlgText='Новое название сохранится в базе данных.';
+        v.hasDlgFields=true;
+        v.dlgFields=[
+          {label:'Название блюда',unit:'',value:d.fields.name!==undefined?d.fields.name:(b?b.name:''),on:(e)=>this.dlgField('name',e.target.value)}
+        ];
+        v.dlgConfirmLabel='Сохранить';
+        v.onDlgConfirm=async ()=>{
+          const newName=(d.fields.name||'').trim();
+          if(newName && b){
+            if(b.id && !String(b.id).startsWith('b')){
+              try {
+                await fetch(this.apiBase + '/meal-prep/batches/' + b.id, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json', 'X-User-Id': this.ownerId },
+                  body: JSON.stringify({ name: newName, name_source: 'user' })
+                });
+              } catch(e) {
+                console.warn('Rename batch API error:', e);
+              }
+            }
+            const batches=st.batches.map(bb=>bb.id!==b.id?bb:Object.assign({},bb,{name:newName}));
+            try { localStorage.setItem('fridge_saved_batches', JSON.stringify(batches)); } catch(e) {}
+            this.setState({dialog:null,batches,toast:{text:'Милпреп переименован в «'+newName+'»'}});
+          } else {
+            this.setState({dialog:null});
+          }
+        };
+      }
+
+      if(d.kind==='gluco'){
+        const b=st.batches.find(x=>x.id===d.id), c2=b.containers[d.cIdx||0], cn=this.contNutriFor(b,c2);
+        v.dlgTitle='Передать в GlucoTracker';
+        v.dlgText='КБЖУ контейнера #'+c2.n+': У '+this.n1(cn.c)+' г · '+this.n0(cn.k)+' ккал. Приложение не рекомендует дозы инсулина.';
+        v.dlgConfirmLabel='Передать в дневник';
+        v.onDlgConfirm=()=>this.setState({dialog:null,toast:{text:'Отправлено в GlucoTracker · '+this.n1(cn.c)+' г У'}});
+      }
+
+      if(d.kind==='writeoffContainer'){
+        const b=st.batches.find(x=>x.id===d.id), c2=b.containers[d.cIdx||0];
+        v.dlgTitle='Списать контейнер #'+c2.n+'?';
+        v.dlgText='Списание уменьшит доступный остаток партии в базе данных.';
+        v.dlgConfirmLabel='Списать полностью';
+        v.onDlgConfirm=async ()=>{
+          if (c2.id) {
+            try {
+              const res = await fetch(this.apiBase + '/containers/' + c2.id + '/consume', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-User-Id': this.ownerId },
+                body: JSON.stringify({ consumed_weight_g: c2.w })
+              });
+              if (res.ok) {
+                await this.loadBatches();
+              }
+            } catch (e) {
+              console.warn('Consume container API error:', e);
+            }
+          }
+          const batches=st.batches.map(bb=>bb.id!==b.id?bb:Object.assign({},bb,{
+            containers:bb.containers.map((x,i)=>i!==d.cIdx?x:Object.assign({},x,{left:0,status:'consumed'}))
+          }));
+          try { localStorage.setItem('fridge_saved_batches', JSON.stringify(batches)); } catch(e) {}
+          this.setState({dialog:null,batches,toast:{text:'Контейнер #'+c2.n+' списан ✓'}});
+        };
+      }
+
+      if(d.kind==='deleteRow'){
+        v.dlgTitle='Удалить контейнер #'+(d.idx+1)+'?';
+        v.dlgText='Вес вернётся в общий выход партии.';
+        v.dlgConfirmLabel='Удалить';
+        v.onDlgConfirm=()=>{
+          const c2=st.comp, rows=(c2.rows||[]).slice(); rows.splice(d.idx,1);
+          this.setState({dialog:null,comp:Object.assign({},c2,{rows})});
+        };
+      }
+
+      if(d.kind==='photo'){
+        v.dlgTitle='Фото блюда';
+        v.dlgText='Фото сохранено и привязано к партии.';
+        v.dlgConfirmLabel='Готово';
+        v.onDlgConfirm=()=>this.setState({dialog:null,comp:Object.assign({},st.comp,{photo:true}),toast:{text:'Фото добавлено к милпрепу'}});
+      }
+    }
+
+    // Email Import Sample Action
+    v.onImportEmailSample = async () => {
+      this.setState({ toast: { text: 'Чек из почты обрабатывается…' } });
+      await this.loadInventory();
+      this.go('fridge');
+    };
+
+    // ==================== TOAST NOTIFICATION ====================
+    v.toast=st.toast?st.toast.text:'';
+    v.canUndo=!!(st.toast&&st.toast.snap);
+    v.onUndo=()=>{ if(st.toast&&st.toast.snap) this.setState(Object.assign({toast:null},st.toast.snap)); };
+    v.toastS={
+      position:'fixed',bottom:'24px',left:'50%',transform:'translateX(-50%)',zIndex:90,
+      background:'#1A1917',color:'#FAF9F5',borderRadius:'10px',padding:'12px 18px',
+      display:'flex',alignItems:'center',gap:'12px',boxShadow:'0 8px 24px rgba(0,0,0,0.25)',maxWidth:'90vw'
+    };
+
+    return v;
+  }
+
+  async openContainerLabel(b, c2) {
+    if (c2.id) {
+      try {
+        const res = await fetch(this.apiBase + '/containers/' + c2.id + '/label', {
+          headers: { 'X-User-Id': this.ownerId }
+        });
+        if (res.ok) {
+          const l = await res.json();
+          this.setState({
+            label: {
+              batchId: b.id,
+              cIdx: (c2.n || 1) - 1,
+              many: b.containers.length,
+              datamatrix: l.datamatrix_code
+            }
+          });
+          return;
+        }
+      } catch (e) {
+        console.warn('Label fetch error:', e);
+      }
+    }
+    this.setState({ label: { batchId: b.id, cIdx: (c2.n || 1) - 1, many: b.containers.length } });
+  }
+
+  contNutriFor(b,x){
+    const sum=b.containers.reduce((a,y)=>a+y.w,0)||1, r=x.w/sum, tt=b.totals;
+    return {k:tt.k*r,p:tt.p*r,f:tt.f*r,c:tt.c*r};
+  }
+}
+</script>
+</body>
+</html>

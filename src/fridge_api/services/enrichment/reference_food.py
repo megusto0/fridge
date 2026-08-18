@@ -1,0 +1,188 @@
+from __future__ import annotations
+
+import re
+from decimal import Decimal
+
+from fridge_api.services.enrichment.types import EnrichmentResult
+
+# Standard Russian food reference table (kcal, protein, fat, carbs per 100g)
+REFERENCE_COMMODITIES: list[dict] = [
+    {
+        "patterns": [
+            r"лук\s+красный",
+            r"лук\s+салатный",
+            r"лук\s+репчат",
+            r"лук\s+репка",
+            r"^лук\b",
+        ],
+        "canonical_name": "Лук красный свежий",
+        "kcal": Decimal("42"),
+        "p": Decimal("1.4"),
+        "f": Decimal("0.2"),
+        "c": Decimal("9.0"),
+        "piece_weight_g": Decimal("140"),
+        "image_url": "https://avatars.mds.yandex.net/get-eda/3595513/559d12088baf3842d92b4f99332e60bb/400x400nocrop",
+    },
+    {
+        "patterns": [r"яйц[оа]\s+курин", r"яйцо\s+с[012]", r"яйцо.*yaratelle", r"яйцо.*окск"],
+        "canonical_name": "Яйцо куриное столовое С1",
+        "brand": "Магнит Свежесть",
+        "kcal": Decimal("157"),
+        "p": Decimal("12.7"),
+        "f": Decimal("11.5"),
+        "c": Decimal("0.7"),
+        "net_quantity": Decimal("10"),
+        "net_unit": "pcs",
+        "piece_weight_g": Decimal("60"),
+        "image_url": "https://avatars.mds.yandex.net/get-eda/16289781/371ca91bf1600e90aa5d674ac4af782d/400x400nocrop",
+    },
+    {
+        "patterns": [r"яблок"],
+        "canonical_name": "Яблоки свежие",
+        "kcal": Decimal("47"),
+        "p": Decimal("0.4"),
+        "f": Decimal("0.4"),
+        "c": Decimal("9.8"),
+        "piece_weight_g": Decimal("180"),
+        "image_url": "https://avatars.mds.yandex.net/get-eda/2415806/39bfc4078d85d25549abef63d5230533/400x400nocrop",
+    },
+    {
+        "patterns": [r"томат.*в\s+собственн.*сок", r"томаты\s+резан", r"помидор.*в\s+собственн"],
+        "canonical_name": "Томаты резаные в собственном соку",
+        "brand": "Premiere of Taste",
+        "kcal": Decimal("24"),
+        "p": Decimal("1.2"),
+        "f": Decimal("0.2"),
+        "c": Decimal("4.0"),
+        "net_quantity": Decimal("400"),
+        "net_unit": "g",
+        "image_url": "https://avatars.mds.yandex.net/get-eda/15377433/06fac525d8b909fb7e8ea9a9f35e9d64/400x400nocrop",
+    },
+    {
+        "patterns": [r"вода.*минеральн", r"вода.*мензелинск", r"вода.*питьев"],
+        "canonical_name": "Вода минеральная природная питьевая",
+        "brand": "Мензелинская",
+        "kcal": Decimal("0"),
+        "p": Decimal("0"),
+        "f": Decimal("0"),
+        "c": Decimal("0"),
+        "net_quantity": Decimal("1.5"),
+        "net_unit": "l",
+        "image_url": "https://avatars.mds.yandex.net/get-eda/3724421/2bee0b83690ecdf976eae4e8502fd61e/400x400nocrop",
+    },
+    {
+        "patterns": [r"азу\s+из\s+индейк", r"филе\s+бедра\s+индейк", r"индейк.*кусков"],
+        "canonical_name": "Азу из индейки охл.",
+        "brand": "Магнит Свежесть",
+        "kcal": Decimal("138"),
+        "p": Decimal("20.0"),
+        "f": Decimal("6.0"),
+        "c": Decimal("0.0"),
+        "net_quantity": Decimal("500"),
+        "net_unit": "g",
+        "image_url": "https://avatars.mds.yandex.net/get-eda/15377433/dbf9168c4332f1f0c56f8fb69b5a69a4/400x400nocrop",
+    },
+    {
+        "patterns": [r"чай.*greenfield.*spring", r"чай.*greenfield"],
+        "canonical_name": "Чай черный Greenfield Spring Melody",
+        "brand": "Greenfield",
+        "kcal": Decimal("2"),
+        "p": Decimal("0.1"),
+        "f": Decimal("0"),
+        "c": Decimal("0.3"),
+        "net_quantity": Decimal("25"),
+        "net_unit": "pcs",
+        "image_url": "https://avatars.mds.yandex.net/get-eda/13439948/afe25ada9268c1da5a3c63070d51cb5c/400x400nocrop",
+    },
+    {
+        "patterns": [r"чечевиц.*красн", r"чечевица.*колот"],
+        "canonical_name": "Чечевица красная колотая",
+        "brand": "Premiere of Taste",
+        "kcal": Decimal("314"),
+        "p": Decimal("21.6"),
+        "f": Decimal("1.1"),
+        "c": Decimal("60.0"),
+        "net_quantity": Decimal("450"),
+        "net_unit": "g",
+        "image_url": "https://avatars.mds.yandex.net/get-eda/3805444/249f5ab1526899bc1e09adcd93639130/400x400nocrop",
+    },
+    {
+        "patterns": [r"mentos", r"pure\s+fresh", r"жевательн.*резинк"],
+        "canonical_name": "Жевательная резинка Mentos Pure Fresh Виноград",
+        "brand": "Mentos",
+        "kcal": Decimal("180"),
+        "p": Decimal("0"),
+        "f": Decimal("0"),
+        "c": Decimal("72.0"),
+        "net_quantity": Decimal("15.5"),
+        "net_unit": "g",
+        "piece_weight_g": Decimal("1.5"),
+        "image_url": "https://avatars.mds.yandex.net/get-eda/15386914/7cd69f0939b4afe4b05105f43d13433b/400x400nocrop",
+    },
+    {
+        "patterns": [r"карамель.*chupa\s+chups", r"chupa\s+chups.*экзотик"],
+        "canonical_name": "Карамель Chupa Chups Экзотик-тропик 12г",
+        "brand": "Chupa Chups",
+        "kcal": Decimal("390"),
+        "p": Decimal("0"),
+        "f": Decimal("0"),
+        "c": Decimal("96.0"),
+        "net_quantity": Decimal("12"),
+        "net_unit": "g",
+        "piece_weight_g": Decimal("12"),
+        "image_url": "https://avatars.mds.yandex.net/get-eda/18022535/dadc1205eb7fc4ff577023e94037dfc7/400x400nocrop",
+    },
+    {
+        "patterns": [r"сметана.*нытвенск.*20", r"сметана.*20%"],
+        "canonical_name": "Сметана 20% Маслозавод Нытвенский 400г",
+        "brand": "Маслозавод Нытвенский",
+        "kcal": Decimal("204"),
+        "p": Decimal("2.5"),
+        "f": Decimal("20.0"),
+        "c": Decimal("3.4"),
+        "net_quantity": Decimal("400"),
+        "net_unit": "g",
+        "image_url": "https://avatars.mds.yandex.net/get-eda/14586256/0cbfa3ed1cbb7eab26443c4cdb240181/400x400nocrop",
+    },
+    {
+        "patterns": [r"сыр.*голландск.*landkaas", r"сыр.*landkaas"],
+        "canonical_name": "Тертый сыр Landkaas Голландский 45% 200г",
+        "brand": "Landkaas",
+        "kcal": Decimal("350"),
+        "p": Decimal("26.0"),
+        "f": Decimal("27.0"),
+        "c": Decimal("0.0"),
+        "net_quantity": Decimal("200"),
+        "net_unit": "g",
+        "image_url": "https://avatars.mds.yandex.net/get-eda/15231005/72011440f029855ef46b25dc02d0eb60/400x400nocrop",
+    },
+]
+
+
+class ReferenceFoodProvider:
+    """Fast, accurate lookup for standard groceries, commodity produce, and staples."""
+
+    def lookup(self, raw_name: str, gtin: str | None = None) -> EnrichmentResult | None:
+        normalized = raw_name.strip().lower()
+        for item in REFERENCE_COMMODITIES:
+            for pat in item["patterns"]:
+                if re.search(pat, normalized, re.IGNORECASE):
+                    return EnrichmentResult(
+                        canonical_name=item["canonical_name"],
+                        brand=item.get("brand"),
+                        gtin=gtin,
+                        net_quantity=item.get("net_quantity"),
+                        net_unit=item.get("net_unit"),
+                        piece_weight_g=item.get("piece_weight_g"),
+                        kcal_per_100=item["kcal"],
+                        protein_per_100=item["p"],
+                        fat_per_100=item["f"],
+                        carbs_per_100=item["c"],
+                        image_url=item.get("image_url"),
+                        nutrition_source_url="https://calorizator.ru/product",
+                        image_source_url=item.get("image_url"),
+                        confidence=Decimal("0.95"),
+                        provider="reference_staples",
+                        verified=True,
+                    )
+        return None

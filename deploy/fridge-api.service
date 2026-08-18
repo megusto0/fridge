@@ -1,0 +1,20 @@
+[Unit]
+Description=Fridge API backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=megusto
+WorkingDirectory=/media/megusto/storage/fridge
+Environment=FRIDGE_AUTO_CREATE_SCHEMA=false
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/home/megusto/.local/bin:/home/megusto/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+ExecStartPre=/media/megusto/storage/fridge/.venv/bin/alembic upgrade head
+ExecStart=/media/megusto/storage/fridge/.venv/bin/uvicorn fridge_api.main:app --host 127.0.0.1 --port 8011
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

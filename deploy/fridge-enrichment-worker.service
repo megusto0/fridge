@@ -1,0 +1,19 @@
+[Unit]
+Description=Fridge nutrition and product image enrichment worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=megusto
+WorkingDirectory=/media/megusto/storage/fridge
+Environment=FRIDGE_AUTO_CREATE_SCHEMA=false
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/home/megusto/.local/bin:/home/megusto/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/media/megusto/storage/fridge/.venv/bin/fridge-enrichment-worker --poll-interval 60
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
