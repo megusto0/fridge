@@ -1,10 +1,11 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 from fridge_api import models  # noqa: F401
 from fridge_api.config import get_settings
@@ -25,14 +26,22 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["null", "http://127.0.0.1:8011", "http://localhost:8011"],
+        allow_origins=settings.cors_allow_origins,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "X-User-Id"],
     )
 
     @app.get("/health", tags=["system"])
     def health() -> dict[str, str]:
-        return {"status": "ok"}
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            return {"status": "ok", "db": "connected"}
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Database unreachable: {exc}",
+            )
 
     app.include_router(products.router)
     app.include_router(receipts.router)
@@ -44,28 +53,18 @@ def create_app() -> FastAPI:
         StaticFiles(directory=settings.upload_directory),
         name="uploaded-media",
     )
-    ui_dir = settings.web_ui_directory if Path(settings.web_ui_directory).is_dir() else settings.mockup_directory
-    if Path(ui_dir).is_dir():
+    ui_dir = Path(settings.web_ui_directory)
+    if ui_dir.is_dir():
         app.mount(
             "/fridge",
-            StaticFiles(directory=ui_dir, html=True),
+            StaticFiles(directory=str(ui_dir), html=True),
             name="fridge-ui",
         )
-        app.mount(
-            "/app",
-            StaticFiles(directory=ui_dir, html=True),
-            name="app",
-        )
-        app.mount(
-            "/mockup",
-            StaticFiles(directory=ui_dir, html=True),
-            name="mockup-compat",
-        )
-        app.mount(
-            "/",
-            StaticFiles(directory=ui_dir, html=True),
-            name="root-ui",
-        )
+
+        @app.get("/", include_in_schema=False)
+        def root_redirect():
+            return RedirectResponse(url="/fridge/", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
     return app
 
 

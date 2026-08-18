@@ -8,18 +8,18 @@ from fridge_api.models import Product, InventoryLot, InventoryStatus, MealPrepBa
 
 
 def test_web_ui_routes_and_static_mounts():
-    """Verify that the Web UI is served directly at root and /app without mockup branding."""
+    """Verify that the Web UI is served at /fridge/ and root redirects to /fridge/."""
     client = TestClient(app)
     
-    # Root route serves HTML UI directly
-    root_res = client.get("/")
+    # Root route redirects to /fridge/
+    root_res = client.get("/", follow_redirects=True)
     assert root_res.status_code == 200
     assert "Холодильник" in root_res.text
     
-    # App route serves HTML UI
-    app_res = client.get("/app/")
-    assert app_res.status_code == 200
-    assert "Холодильник" in app_res.text
+    # Fridge route serves HTML UI
+    fridge_res = client.get("/fridge/")
+    assert fridge_res.status_code == 200
+    assert "Холодильник" in fridge_res.text
 
 
 def test_inventory_direct_consumption_full_and_partial():

@@ -9,7 +9,7 @@ import websocket
 
 
 CDP_URL = "http://127.0.0.1:9222"
-APP_URL = "http://127.0.0.1:8011/app/"
+APP_URL = "http://127.0.0.1:8011/fridge/"
 TEST_USER_ID = "f51669a5-b262-475b-979c-4da82b072266"
 
 
