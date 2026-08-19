@@ -42,6 +42,21 @@ class EnrichmentStatus(StrEnum):
     FAILED = "failed"
 
 
+class ServingUnit(StrEnum):
+    """How a product is eaten, once someone has said.
+
+    Nothing about a product settles this on its own. An apple and a jar of
+    sweetener both weigh 180 g a piece; a yoghurt and a tub of ice cream are
+    both one package. The first is taken whole and the second by the spoonful,
+    and only the person eating it knows which.
+    """
+
+    #: Taken whole: an apple, a yoghurt, an egg, one ice lolly.
+    PIECES = "pcs"
+    #: A package you take part of: a tub, a bag of grain, cake layers.
+    GRAMS = "g"
+
+
 class EnrichmentJobStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
@@ -114,6 +129,12 @@ class Product(Base, TimestampMixin):
     confidence: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
     image_url: Mapped[str | None] = mapped_column(Text)
     piece_weight_g: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    # Null until someone says. Enrichment can guess a piece's weight from a
+    # label, but not whether a piece is what you eat, so this is left empty
+    # rather than defaulted — an unanswered question, not a wrong answer.
+    serving_unit: Mapped[ServingUnit | None] = mapped_column(
+        Enum(ServingUnit, native_enum=False), nullable=True
+    )
     nutrition_source_url: Mapped[str | None] = mapped_column(Text)
     image_source_url: Mapped[str | None] = mapped_column(Text)
 

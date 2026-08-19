@@ -7,6 +7,7 @@ from fridge_api.schemas import (
     ProductAliasCreate,
     ProductCreate,
     ProductResponse,
+    ProductServingUnitUpdate,
     ReceiptLineResponse,
     ResolveReceiptLineRequest,
 )
@@ -23,6 +24,16 @@ def create_product(payload: ProductCreate, session: SessionDep, owner_id: OwnerD
 @router.get("/products", response_model=list[ProductResponse])
 def list_products(session: SessionDep, owner_id: OwnerDep):
     return service.list_products(session, owner_id)
+
+
+@router.patch("/products/{product_id}/serving-unit", response_model=ProductResponse)
+def set_serving_unit(
+    product_id: uuid.UUID,
+    payload: ProductServingUnitUpdate,
+    session: SessionDep,
+    owner_id: OwnerDep,
+):
+    return service.set_serving_unit(session, owner_id, product_id, payload.serving_unit)
 
 
 @router.post("/products/{product_id}/aliases", status_code=status.HTTP_201_CREATED)

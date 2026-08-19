@@ -12,6 +12,7 @@ from fridge_api.models import (
     Product,
     ProductAlias,
     ReceiptLine,
+    ServingUnit,
     utcnow,
 )
 from fridge_api.schemas import ProductAliasCreate, ProductCreate, ResolveReceiptLineRequest
@@ -43,6 +44,25 @@ def get_visible_product(session: Session, owner_id: uuid.UUID, product_id: uuid.
     )
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found")
+    return product
+
+
+def set_serving_unit(
+    session: Session,
+    owner_id: uuid.UUID,
+    product_id: uuid.UUID,
+    serving_unit: ServingUnit,
+) -> Product:
+    """Record how this product is eaten.
+
+    Answered once and kept, because the answer belongs to the product and not
+    to whoever asked: a tub of ice cream is eaten by the spoonful in every app
+    that shows it, and on every phone.
+    """
+    product = get_visible_product(session, owner_id, product_id)
+    product.serving_unit = serving_unit
+    session.commit()
+    session.refresh(product)
     return product
 
 

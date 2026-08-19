@@ -13,6 +13,7 @@ from fridge_api.models import (
     EnrichmentStatus,
     InventoryStatus,
     ReceiptOperation,
+    ServingUnit,
 )
 
 
@@ -28,6 +29,7 @@ class ProductCreate(BaseModel):
     net_quantity: Decimal | None = Field(default=None, gt=0)
     net_unit: str | None = Field(default=None, max_length=16)
     piece_weight_g: Decimal | None = Field(default=None, gt=0)
+    serving_unit: ServingUnit | None = None
     kcal_per_100: Decimal | None = Field(default=None, ge=0)
     protein_per_100: Decimal | None = Field(default=None, ge=0)
     fat_per_100: Decimal | None = Field(default=None, ge=0)
@@ -55,6 +57,7 @@ class ProductResponse(OrmModel):
     net_quantity: Decimal | None
     net_unit: str | None
     piece_weight_g: Decimal | None
+    serving_unit: ServingUnit | None = None
     kcal_per_100: Decimal | None
     protein_per_100: Decimal | None
     fat_per_100: Decimal | None
@@ -202,6 +205,7 @@ class InventoryProductSummary(OrmModel):
     net_quantity: Decimal | None
     net_unit: str | None
     piece_weight_g: Decimal | None = None
+    serving_unit: ServingUnit | None = None
     kcal_per_100: Decimal | None
     protein_per_100: Decimal | None
     fat_per_100: Decimal | None
@@ -210,6 +214,12 @@ class InventoryProductSummary(OrmModel):
     confidence: Decimal | None
     image_url: str | None
     nutrition_source_url: str | None
+
+
+class ProductServingUnitUpdate(BaseModel):
+    """Someone has said how this product is eaten."""
+
+    serving_unit: ServingUnit
 
 
 class BatchIngredientInput(BaseModel):
