@@ -51,15 +51,36 @@ def list_inventory(
             if p and p.piece_weight_g and p.piece_weight_g > 0:
                 estimated_pieces = max(1, round(float(weight_grams / p.piece_weight_g)))
         elif unit_norm in ("pcs", "шт", "pack", "уп"):
-            estimated_pieces = int(rem)
-            if p and p.piece_weight_g and p.piece_weight_g > 0:
+            # A lot counted in «шт» is one *package*, and a package of eggs
+            # holds ten of them. net_quantity in pieces is the product saying
+            # so; piece_weight_g then describes one egg, not one box, and
+            # multiplying the two together conflated the box with its contents
+            # — the shelf held ten eggs and the API reported one of 60 g.
+            per_pack = None
+            if (
+                p
+                and p.net_quantity
+                and p.net_quantity > 0
+                and (p.net_unit or "").lower() in ("pcs", "шт")
+            ):
+                per_pack = p.net_quantity
+
+            if per_pack:
+                estimated_pieces = max(1, int(rem * per_pack))
+                if p.piece_weight_g and p.piece_weight_g > 0:
+                    weight_grams = rem * per_pack * p.piece_weight_g
+            elif p and p.piece_weight_g and p.piece_weight_g > 0:
+                estimated_pieces = int(rem)
                 weight_grams = rem * p.piece_weight_g
             elif p and p.net_quantity and p.net_quantity > 0:
+                estimated_pieces = int(rem)
                 unit_p = (p.net_unit or "").lower()
                 if unit_p in ("g", "г", "gr", "гр", "ml", "мл"):
                     weight_grams = rem * p.net_quantity
                 elif unit_p in ("kg", "кг", "l", "л"):
                     weight_grams = rem * p.net_quantity * Decimal("1000")
+            else:
+                estimated_pieces = int(rem)
 
         result.append(
             {
