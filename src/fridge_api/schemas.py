@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from fridge_api.models import (
     BatchStatus,
     ContainerStatus,
+    EnrichmentJobStatus,
     EnrichmentStatus,
     InventoryStatus,
     ReceiptOperation,
@@ -430,3 +431,30 @@ class ImageUploadResponse(BaseModel):
     url: str
     content_type: str
     size: int
+
+
+class EnrichmentJobRow(OrmModel):
+    """One thing the enrichment was asked to look up."""
+
+    id: uuid.UUID
+    name: str | None
+    status: EnrichmentJobStatus
+    attempts: int
+    provider: str | None = None
+    last_error: str | None = None
+    next_attempt_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_at: datetime
+
+
+class EnrichmentStatusResponse(BaseModel):
+    """How the queue stands, and what happened to the most recent items."""
+
+    pending: int
+    running: int
+    retry: int
+    completed: int
+    failed: int
+    #: Everything still owed an answer.
+    in_flight: int
+    jobs: list[EnrichmentJobRow]

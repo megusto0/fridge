@@ -10,7 +10,7 @@ from sqlalchemy import text
 from fridge_api import models  # noqa: F401
 from fridge_api.config import get_settings
 from fridge_api.db import Base, engine
-from fridge_api.routers import inventory, meal_prep, media, products, receipts
+from fridge_api.routers import enrichment, inventory, meal_prep, media, products, receipts
 
 
 @asynccontextmanager
@@ -43,6 +43,7 @@ def create_app() -> FastAPI:
                 detail=f"Database unreachable: {exc}",
             )
 
+    app.include_router(enrichment.router)
     app.include_router(products.router)
     app.include_router(receipts.router)
     app.include_router(inventory.router)
