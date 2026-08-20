@@ -652,6 +652,20 @@
             <div style="min-width:0">
               <div style="font-size:14.5px;font-weight:500">{{ j.name }}</div>
               <div style="font-size:12px;color:#56534C;margin-top:2px">{{ j.detail }}</div>
+              <sc-if value="{{ j.hasTrail }}" hint-placeholder-val="{{ true }}">
+                <div style="margin-top:6px;display:flex;flex-direction:column;gap:2px">
+                  <sc-for list="{{ j.trail }}" as="a" hint-placeholder-count="3">
+                    <div style="{{ a.s }}">{{ a.text }}</div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ j.hasSources }}" hint-placeholder-val="{{ true }}">
+                <div style="margin-top:6px;display:flex;gap:12px;flex-wrap:wrap">
+                  <sc-for list="{{ j.sources }}" as="s" hint-placeholder-count="2">
+                    <a href="{{ s.href }}" target="_blank" rel="noopener noreferrer" style="{{ s.s }}">{{ s.label }}: {{ s.host }}</a>
+                  </sc-for>
+                </div>
+              </sc-if>
             </div>
             <div style="{{ j.statusS }}">{{ j.status }}</div>
           </div>
@@ -1863,18 +1877,43 @@ class Component extends DCLogic {
       boxS:'background:#FAF9F5;border:1px solid #D5D0C5;border-radius:12px;padding:12px 14px;min-width:96px',
       nS:'font-size:22px;font-weight:600',
     }));
-    v.workerJobs = jobs.map(j => ({
-      name: j.name || '—',
-      status: RU[j.status] || j.status,
-      statusS: 'font-size:12px;font-weight:600;color:' + (TONE[j.status] || '#56534C'),
-      // Which of the four answered. «Готово» alone does not say.
-      detail: j.status === 'completed'
-        ? (j.provider ? 'источник: ' + j.provider : 'источник неизвестен')
-        : j.status === 'running'
-          ? 'ищет сейчас'
-          : (j.last_error || (j.attempts ? 'попыток: ' + j.attempts : 'ждёт очереди')),
-      rowS:'display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #E7E2D8',
-    }));
+    const PROV = {yandex_eda:'Яндекс.Еда', open_food_facts:'Open Food Facts',
+                  reference_food:'Справочник', hermes:'Гермес',
+                  existing_product:'уже на полке'};
+    const OUT = {hit:'нашёл', miss:'мимо', error:'ошибка', image:'дал фото'};
+    const host = (u) => { try { return new URL(u).hostname.replace(/^www\./,''); } catch (e) { return u; } };
+    const secs = (ms) => ms >= 1000 ? (Math.round(ms / 100) / 10) + 'с' : ms + 'мс';
+
+    v.workerJobs = jobs.map(j => {
+      const trail = Array.isArray(j.attempts_trail) ? j.attempts_trail : [];
+      return {
+        name: j.name || '—',
+        status: RU[j.status] || j.status,
+        statusS: 'font-size:12px;font-weight:600;color:' + (TONE[j.status] || '#56534C'),
+        detail: j.status === 'completed'
+          ? (j.provider ? 'ответил: ' + (PROV[j.provider] || j.provider) : 'источник неизвестен')
+          : j.status === 'running'
+            ? 'ищет сейчас'
+            : (j.last_error || (j.attempts ? 'попыток: ' + j.attempts : 'ждёт очереди')),
+        // Everyone who was asked, in order. Three misses before one hit is the
+        // difference between «медленно» and «сломано».
+        hasTrail: trail.length > 0,
+        trail: trail.map(a => ({
+          text: (PROV[a.provider] || a.provider) + ' — ' + (OUT[a.outcome] || a.outcome)
+                + (a.ms ? ', ' + secs(a.ms) : '') + (a.detail ? ' (' + a.detail + ')' : ''),
+          s: 'font-size:11.5px;color:' + (a.outcome === 'hit' ? '#1E5B3C' : (a.outcome === 'error' ? '#9A3B2C' : '#8A857B')),
+        })),
+        // The nutrition and the picture routinely come from different places.
+        hasSources: !!(j.nutrition_source_url || j.image_source_url),
+        sources: [
+          j.nutrition_source_url ? {label:'БЖУ', href:j.nutrition_source_url, host:host(j.nutrition_source_url)} : null,
+          j.image_source_url ? {label:'фото', href:j.image_source_url, host:host(j.image_source_url)} : null,
+        ].filter(Boolean).map(s => Object.assign(s, {
+          s:'font-size:11.5px;color:#56534C;text-decoration:none;border-bottom:1px solid #D5D0C5',
+        })),
+        rowS:'display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #E7E2D8',
+      };
+    });
     v.workerEmpty = jobs.length === 0;
     v.onWorkerRefresh = () => this.fetchEnrichment();
     v.workerUpdated = st.enrichAt ? ('обновлено ' + st.enrichAt.toLocaleTimeString('ru-RU')) : '';

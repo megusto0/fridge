@@ -113,3 +113,53 @@ def test_someone_elses_queue_is_not_shown(
 
     assert body["in_flight"] == 0
     assert body["jobs"] == []
+
+
+def test_the_trail_says_who_was_asked_and_what_they_said(
+    client, owner_headers, session_factory
+):
+    """«Готово» hides the three providers that missed before one answered."""
+    with session_factory() as session:
+        _job(
+            session,
+            "Сметана Для всей семьи 15% 250 г",
+            EnrichmentJobStatus.COMPLETED,
+            result={
+                "provider": "hermes",
+                "attempts": [
+                    {"provider": "yandex_eda", "outcome": "miss", "ms": 1200},
+                    {"provider": "open_food_facts", "outcome": "miss", "ms": 380},
+                    {"provider": "hermes", "outcome": "hit", "ms": 48000},
+                ],
+                "enrichment": {
+                    "nutrition_source_url": "https://calorizator.ru/product/smetana",
+                    "image_source_url": "https://eda.yandex/photo.jpg",
+                    "confidence": "0.9",
+                },
+            },
+            completed_at=datetime.now(UTC),
+        )
+
+    row = client.get("/enrichment/status", headers=owner_headers).json()["jobs"][0]
+
+    assert [a["provider"] for a in row["attempts_trail"]] == [
+        "yandex_eda",
+        "open_food_facts",
+        "hermes",
+    ]
+    assert [a["outcome"] for a in row["attempts_trail"]] == ["miss", "miss", "hit"]
+    assert row["attempts_trail"][2]["ms"] == 48000
+    # The two halves of the answer come from different places, and both are named.
+    assert row["nutrition_source_url"] == "https://calorizator.ru/product/smetana"
+    assert row["image_source_url"] == "https://eda.yandex/photo.jpg"
+    assert row["confidence"] == "0.9"
+
+
+def test_a_job_that_never_ran_has_an_empty_trail(client, owner_headers, session_factory):
+    with session_factory() as session:
+        _job(session, "Пончик", EnrichmentJobStatus.PENDING)
+
+    row = client.get("/enrichment/status", headers=owner_headers).json()["jobs"][0]
+
+    assert row["attempts_trail"] == []
+    assert row["nutrition_source_url"] is None

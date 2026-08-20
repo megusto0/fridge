@@ -50,6 +50,7 @@ def enrichment_status(session: Session, owner_id: uuid.UUID, limit: int) -> dict
 def _job_row(job: EnrichmentJob) -> dict:
     line: ReceiptLine | None = job.receipt_line
     result = job.result or {}
+    found = result.get("enrichment") or {}
     return {
         "id": job.id,
         "name": line.raw_name if line is not None else None,
@@ -60,6 +61,15 @@ def _job_row(job: EnrichmentJob) -> dict:
         # that something worked.
         "provider": result.get("provider"),
         "last_error": job.last_error,
+        # Where each half of the answer came from. The nutrition and the
+        # picture routinely come from different places — Hermes reads a table
+        # off some site, the photograph arrives from Yandex — and «источник:
+        # hermes» alone hides that.
+        "nutrition_source_url": found.get("nutrition_source_url") or None,
+        "image_source_url": found.get("image_source_url") or None,
+        "confidence": found.get("confidence"),
+        # Everyone who was asked, in order, with what they said.
+        "attempts_trail": result.get("attempts") or [],
         "next_attempt_at": job.next_attempt_at,
         "completed_at": job.completed_at,
         "created_at": job.created_at,

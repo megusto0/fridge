@@ -186,8 +186,17 @@ class EnrichmentWorker:
             session.expunge_all()
 
         logger.info("%s: looking up", query.raw_name)
-        result = self.resolve(query)
+        trail: list[dict[str, object]] = []
+        result = self.resolve(query, trail)
         elapsed = time.monotonic() - started
+        logger.info(
+            "%s: %s",
+            query.raw_name,
+            " · ".join(
+                f"{step['provider']} {step['outcome']} {step['ms']}ms" for step in trail
+            )
+            or "no providers configured",
+        )
 
         with self.session_factory() as session:
             job = session.get(EnrichmentJob, job_id)
@@ -205,6 +214,7 @@ class EnrichmentWorker:
                 job.locked_at = None
                 job.completed_at = _now()
                 job.last_error = "No sufficiently confident product match"
+                job.result = {"attempts": trail}
                 session.commit()
                 return
             product = None
@@ -223,7 +233,9 @@ class EnrichmentWorker:
                 product.canonical_name,
                 result.kcal_per_100,
             )
-            self._link(session, job, line, product, provider=result.provider, result=result)
+            self._link(
+                session, job, line, product, provider=result.provider, result=result, trail=trail
+            )
             session.commit()
 
     def _query_from_line(self, line: ReceiptLine) -> EnrichmentQuery:
@@ -242,17 +254,59 @@ class EnrichmentWorker:
             product.carbs_per_100,
         )
 
-    def resolve(self, query: EnrichmentQuery) -> EnrichmentResult | None:
+    def resolve(
+        self,
+        query: EnrichmentQuery,
+        trail: list[dict[str, object]] | None = None,
+    ) -> EnrichmentResult | None:
+        """Ask each source in turn, and — when asked — keep a note of who said what.
+
+        The providers are tried cheapest first and the first answer wins, so
+        the ones that missed leave nothing behind. That is exactly what you
+        want to see afterwards: «Яндекс промолчал, OFF не знает штрих-кода,
+        Гермес думал минуту и нашёл» explains the result, and the result alone
+        does not.
+        """
+
+        def note(provider: str, outcome: str, started: float, detail: str | None = None) -> None:
+            if trail is None:
+                return
+            entry: dict[str, object] = {
+                "provider": provider,
+                "outcome": outcome,
+                "ms": int((time.monotonic() - started) * 1000),
+            }
+            if detail:
+                entry["detail"] = detail
+            trail.append(entry)
+
+        def attempt(provider: str, call):
+            started = time.monotonic()
+            try:
+                value = call()
+            except TemporaryEnrichmentError:
+                note(provider, "error", started, "временная ошибка")
+                raise
+            except Exception as exc:
+                note(provider, "error", started, str(exc)[:200])
+                raise
+            note(provider, "hit" if value is not None else "miss", started)
+            return value
+
         card: YandexCard | None = None
         if self.yandex_eda is not None:
-            card = self.yandex_eda.lookup_card(query)
+            card = attempt("yandex_eda", lambda: self.yandex_eda.lookup_card(query))
             if card is not None and card.nutrients is not None:
                 return self.yandex_eda._to_result(query, card)
-        result = self.open_food_facts.lookup(query.gtin)
+
+        result = attempt("open_food_facts", lambda: self.open_food_facts.lookup(query.gtin))
         if result is None and self.reference_food is not None:
-            result = self.reference_food.lookup(query.raw_name, query.gtin)
+            result = attempt(
+                "reference_food",
+                lambda: self.reference_food.lookup(query.raw_name, query.gtin),
+            )
         if result is None and self.hermes is not None:
-            result = self.hermes.lookup(query)
+            result = attempt("hermes", lambda: self.hermes.lookup(query))
         if result is None:
             return None
         if card is not None and card.image_url and not result.image_url:
@@ -261,6 +315,8 @@ class EnrichmentWorker:
                 image_url=card.image_url,
                 image_source_url=card.image_url,
             )
+            if trail is not None:
+                trail.append({"provider": "yandex_eda", "outcome": "image", "ms": 0})
         return result
 
     def reprocess_placeholders(self, *, limit: int = 100) -> list[dict[str, object]]:
@@ -437,6 +493,7 @@ class EnrichmentWorker:
         *,
         provider: str,
         result: EnrichmentResult | None = None,
+        trail: list[dict[str, object]] | None = None,
     ) -> None:
         line.product_id = product.id
         line.enrichment_status = product.nutrition_status
@@ -457,6 +514,8 @@ class EnrichmentWorker:
             "product_id": str(product.id),
             "provider": provider,
             "enrichment": result.as_json() if result else None,
+            # Who was asked, in order, and what each of them said.
+            "attempts": trail or [],
         }
 
     def _retry(self, job_id: uuid.UUID, error: str) -> None:

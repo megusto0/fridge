@@ -433,6 +433,16 @@ class ImageUploadResponse(BaseModel):
     size: int
 
 
+class EnrichmentAttempt(BaseModel):
+    """One provider, asked once."""
+
+    provider: str
+    #: "hit", "miss", "error", or "image" when only the photograph came from it.
+    outcome: str
+    ms: int
+    detail: str | None = None
+
+
 class EnrichmentJobRow(OrmModel):
     """One thing the enrichment was asked to look up."""
 
@@ -441,6 +451,10 @@ class EnrichmentJobRow(OrmModel):
     status: EnrichmentJobStatus
     attempts: int
     provider: str | None = None
+    nutrition_source_url: str | None = None
+    image_source_url: str | None = None
+    confidence: str | None = None
+    attempts_trail: list[EnrichmentAttempt] = []
     last_error: str | None = None
     next_attempt_at: datetime | None = None
     completed_at: datetime | None = None
