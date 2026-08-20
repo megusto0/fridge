@@ -1276,6 +1276,11 @@ class Component extends DCLogic {
         packCount = remRaw;
         packSize = prodNetQty;
         weightGrams = rem;
+        // estimated_pieces counted packages; this row now counts grams, and a
+        // stale count of packages is worse than no count at all.
+        estPieces = (pieceWeight && pieceWeight > 0)
+          ? Math.max(1, Math.round(rem / pieceWeight))
+          : null;
       }
       // If product has net volume in ml (e.g. cream 200ml, energy drink 449ml, water 1.5l)
       else if (prodNetQty && (prodNetUnit === 'ml' || prodNetUnit === 'мл' || prodNetUnit === 'l' || prodNetUnit === 'л')) {
@@ -1283,6 +1288,7 @@ class Component extends DCLogic {
         unitStr = 'мл';
         packCount = remRaw;
         packSize = prodNetQty;
+        estPieces = null;
       }
       else {
         rem = Math.round(remRaw);
@@ -1989,9 +1995,11 @@ class Component extends DCLogic {
       if (isEnded) {
         availText = '0 ' + p.unit + ' (закончился)';
       } else if (p.unit === 'г') {
-        if (p.estPieces || (p.pieceWeight && p.pieceWeight > 0)) {
-          const pw = p.pieceWeight || 1;
-          const pcs = Math.max(1, Math.round(a / pw));
+        // Only once there is a whole one. Flooring the count at 1 announced
+        // «≈ 1 шт.» over the 60 g left of a 520 g tub — a piece that is not
+        // there is not a better answer than no count.
+        if (p.pieceWeight && p.pieceWeight > 0 && a >= p.pieceWeight) {
+          const pcs = Math.round(a / p.pieceWeight);
           availText = this.n0(a) + ' г (≈ ' + pcs + ' шт.)';
         } else if (p.packSize && p.packSize > 0) {
           const packs = Math.round((a / p.packSize) * 10) / 10;
