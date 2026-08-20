@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 import uuid
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -32,6 +34,12 @@ from fridge_api.services.enrichment.types import (
     is_placeholder_nutrition,
 )
 from fridge_api.services.enrichment.yandex_eda import YandexCard, YandexEdaProvider
+
+#: Everything the enrichment does to a shopping list, in one place. Until now
+#: the worker was silent: a receipt went in, products came out enriched or not,
+#: and the only way to tell which provider answered — or why nothing did — was
+#: to read the rows afterwards and guess.
+logger = logging.getLogger("fridge.enrichment")
 
 
 def _now() -> datetime:
@@ -104,6 +112,11 @@ class EnrichmentWorker:
                 )
             )
             session.commit()
+            if result.rowcount:
+                logger.warning(
+                    "%d job(s) were left locked by a worker that died; retrying",
+                    result.rowcount,
+                )
             return result.rowcount
 
     def _claim(self) -> uuid.UUID | None:
@@ -146,6 +159,7 @@ class EnrichmentWorker:
         return True
 
     def _process(self, job_id: uuid.UUID) -> None:
+        started = time.monotonic()
         with self.session_factory() as session:
             job = session.scalar(
                 select(EnrichmentJob)
@@ -159,6 +173,11 @@ class EnrichmentWorker:
             line = job.receipt_line
             existing = self._find_existing(session, line)
             if existing is not None and not self._is_placeholder(existing):
+                logger.info(
+                    "%s: already known as %r, nothing to look up",
+                    line.raw_name,
+                    existing.canonical_name,
+                )
                 self._link(session, job, line, existing, provider="existing_product")
                 session.commit()
                 return
@@ -166,7 +185,9 @@ class EnrichmentWorker:
             existing_id = existing.id if existing is not None else None
             session.expunge_all()
 
+        logger.info("%s: looking up", query.raw_name)
         result = self.resolve(query)
+        elapsed = time.monotonic() - started
 
         with self.session_factory() as session:
             job = session.get(EnrichmentJob, job_id)
@@ -176,6 +197,9 @@ class EnrichmentWorker:
             if line is None:
                 return
             if result is None:
+                logger.warning(
+                    "%s: no provider could answer, %.1fs", line.raw_name, elapsed
+                )
                 line.enrichment_status = EnrichmentStatus.AMBIGUOUS
                 job.status = EnrichmentJobStatus.FAILED
                 job.locked_at = None
@@ -191,6 +215,14 @@ class EnrichmentWorker:
             else:
                 self._apply_result(product, line, result)
                 self._ensure_alias(session, line, product)
+            logger.info(
+                "%s: %s answered in %.1fs — %s, %s kcal/100",
+                line.raw_name,
+                result.provider,
+                elapsed,
+                product.canonical_name,
+                result.kcal_per_100,
+            )
             self._link(session, job, line, product, provider=result.provider, result=result)
             session.commit()
 
@@ -434,14 +466,28 @@ class EnrichmentWorker:
                 return
             job.locked_at = None
             job.last_error = error[-4000:]
+            line = session.get(ReceiptLine, job.receipt_line_id)
+            name = line.raw_name if line is not None else str(job_id)
             if job.attempts >= self.settings.enrichment_max_attempts:
+                logger.error(
+                    "%s: giving up after %d attempts — %s",
+                    name,
+                    job.attempts,
+                    error,
+                )
                 job.status = EnrichmentJobStatus.FAILED
                 job.completed_at = _now()
-                line = session.get(ReceiptLine, job.receipt_line_id)
                 if line is not None:
                     line.enrichment_status = EnrichmentStatus.FAILED
             else:
                 job.status = EnrichmentJobStatus.RETRY
                 minutes = min(60, 2 ** max(0, job.attempts - 1))
                 job.next_attempt_at = _now() + timedelta(minutes=minutes)
+                logger.warning(
+                    "%s: attempt %d failed, retrying in %dm — %s",
+                    name,
+                    job.attempts,
+                    minutes,
+                    error,
+                )
             session.commit()
