@@ -50,9 +50,10 @@
       </div>
 
       <!-- Backend Connection Status Indicator -->
-      <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#56534C;background:#EDE8DF;border:1px solid #D5D0C5;border-radius:20px;padding:3px 10px;cursor:pointer" title="Нажмите для обновления данных из API" onClick="{{ onRefreshBackend }}">
+      <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#56534C;background:#EDE8DF;border:1px solid #D5D0C5;border-radius:20px;padding:3px 10px;cursor:pointer" title="{{ workerTitle }}" onClick="{{ onWorker }}" role="button" tabIndex="0">
         <div style="{{ backendDotS }}"></div>
         <span class="mono">{{ backendStatusText }}</span>
+        <span class="mono" style="{{ workerBriefS }}">{{ workerBrief }}</span>
       </div>
 
       <!-- Reconciled Header Product Counter -->
@@ -619,6 +620,46 @@
     </div>
   </sc-if>
 
+  <!-- ==================== ENRICHMENT WORKER ==================== -->
+  <sc-if value="{{ isWorker }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;max-width:680px;width:100%;margin:0 auto;padding:32px 24px 44px">
+      <button type="button" onClick="{{ onFridge }}" style="background:none;border:none;padding:0;color:#56534C;font-size:13px;cursor:pointer">← Холодильник</button>
+      <div class="serif" style="font-size:26px;font-weight:600;margin-top:10px">Обогащение</div>
+      <div style="font-size:13.5px;color:#56534C;margin-top:6px">Что скрипт ищет для новых позиций: БЖУ, фото и вес штуки. Сначала Яндекс.Еда и Open Food Facts, затем Гермес.</div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:20px">
+        <sc-for list="{{ workerCounts }}" as="c" hint-placeholder-count="5">
+          <div style="{{ c.boxS }}">
+            <div class="mono" style="{{ c.nS }}">{{ c.n }}</div>
+            <div style="font-size:12px;color:#56534C">{{ c.k }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:26px">
+        <div class="serif" style="font-size:18px;font-weight:600">Последние позиции</div>
+        <button type="button" onClick="{{ onWorkerRefresh }}" style="background:#FAF9F5;border:1px solid #D5D0C5;border-radius:10px;padding:7px 12px;font-size:12.5px;cursor:pointer;min-height:36px">Обновить</button>
+      </div>
+      <div class="mono" style="font-size:11.5px;color:#8A857B;margin-top:2px">{{ workerUpdated }}</div>
+
+      <sc-if value="{{ workerEmpty }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size:13.5px;color:#56534C;margin-top:16px">Пока ничего не обогащалось. Позиции появляются здесь после импорта чека.</div>
+      </sc-if>
+
+      <div style="margin-top:8px">
+        <sc-for list="{{ workerJobs }}" as="j" hint-placeholder-count="6">
+          <div style="{{ j.rowS }}">
+            <div style="min-width:0">
+              <div style="font-size:14.5px;font-weight:500">{{ j.name }}</div>
+              <div style="font-size:12px;color:#56534C;margin-top:2px">{{ j.detail }}</div>
+            </div>
+            <div style="{{ j.statusS }}">{{ j.status }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
   <!-- ==================== BOTTOM SHEETS ==================== -->
   <sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}">
     <div style="position:fixed;inset:0;background:rgba(26,25,23,0.45);z-index:60;display:flex;align-items:flex-end;justify-content:center" onClick="{{ onCloseSheet }}">
@@ -907,7 +948,7 @@ class Component extends DCLogic {
   ];
 
   state = {
-    route:'fridge', q:'', chip:'Все',
+    route:'fridge', q:'', chip:'Все', enrich:null, enrichAt:null,
     sel:{}, stock:{}, sheet:null, sheetCustom:'', comp:null,
     batches:[],
     prepChip:'Все', label:null, toast:null, saveError:false, dialog:null,
@@ -918,6 +959,7 @@ class Component extends DCLogic {
   componentDidMount() {
     window.__app = this;
     this.initBackend();
+    this.startEnrichmentPolling();
   }
 
   getApiBase() {
@@ -994,6 +1036,27 @@ class Component extends DCLogic {
       this.setState({ backendOnline: false, backendLoaded: true });
     }
     this.restoreDraft();
+  }
+
+  async fetchEnrichment() {
+    // Quiet on failure: this is a status line, and a status line that throws
+    // is worse than one that says nothing.
+    try {
+      const res = await this.apiFetch('/enrichment/status?limit=40');
+      if (!res.ok) return;
+      const data = await res.json();
+      this.setState({ enrich: data, enrichAt: new Date() });
+    } catch (e) {
+      console.warn('Enrichment status unavailable:', e);
+    }
+  }
+
+  startEnrichmentPolling() {
+    if (this._enrichTimer) return;
+    this.fetchEnrichment();
+    // Ten seconds: Hermes can think for minutes, so nothing here is urgent,
+    // but «уже посчиталось?» should not need a manual refresh either.
+    this._enrichTimer = setInterval(() => this.fetchEnrichment(), 10000);
   }
 
   async fetchInventory(ownerId) {
@@ -1761,11 +1824,61 @@ class Component extends DCLogic {
       flex:'none'
     };
     v.backendStatusText = st.backendOnline ? 'API :8011 онлайн' : 'Офлайн (локально)';
+
+    // Enrichment, in as few words as fit next to the dot. The count that
+    // matters after adding a receipt is what is still owed an answer.
+    const en = st.enrich;
+    const flight = en ? (en.in_flight || 0) : 0;
+    const failed = en ? (en.failed || 0) : 0;
+    if (!en) {
+      v.workerBrief = '';
+      v.workerTitle = 'Статус обогащения недоступен';
+    } else if (flight > 0) {
+      v.workerBrief = '· считает ' + flight;
+      v.workerTitle = flight + ' поз. в очереди обогащения — нажмите для подробностей';
+    } else if (failed > 0) {
+      v.workerBrief = '· не вышло ' + failed;
+      v.workerTitle = failed + ' поз. без БЖУ — нажмите для подробностей';
+    } else {
+      v.workerBrief = '· всё посчитано';
+      v.workerTitle = 'Очередь обогащения пуста — нажмите для подробностей';
+    }
+    v.workerBriefS = 'color:' + (flight > 0 ? '#8A6D1F' : (failed > 0 ? '#9A3B2C' : '#1E5B3C'));
+
+    // The detail page.
+    const jobs = (en && Array.isArray(en.jobs)) ? en.jobs : [];
+    const RU = {pending:'в очереди', running:'считается', retry:'повтор', completed:'готово', failed:'не вышло'};
+    const TONE = {pending:'#8A6D1F', running:'#8A6D1F', retry:'#8A6D1F', completed:'#1E5B3C', failed:'#9A3B2C'};
+    v.workerCounts = [
+      {k:'В очереди', n:(en?en.pending:0)}, {k:'Считается', n:(en?en.running:0)},
+      {k:'Повтор', n:(en?en.retry:0)}, {k:'Готово', n:(en?en.completed:0)},
+      {k:'Не вышло', n:(en?en.failed:0)},
+    ].map(c => Object.assign(c, {
+      boxS:'background:#FAF9F5;border:1px solid #D5D0C5;border-radius:12px;padding:12px 14px;min-width:96px',
+      nS:'font-size:22px;font-weight:600',
+    }));
+    v.workerJobs = jobs.map(j => ({
+      name: j.name || '—',
+      status: RU[j.status] || j.status,
+      statusS: 'font-size:12px;font-weight:600;color:' + (TONE[j.status] || '#56534C'),
+      // Which of the four answered. «Готово» alone does not say.
+      detail: j.status === 'completed'
+        ? (j.provider ? 'источник: ' + j.provider : 'источник неизвестен')
+        : j.status === 'running'
+          ? 'ищет сейчас'
+          : (j.last_error || (j.attempts ? 'попыток: ' + j.attempts : 'ждёт очереди')),
+      rowS:'display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #E7E2D8',
+    }));
+    v.workerEmpty = jobs.length === 0;
+    v.onWorkerRefresh = () => this.fetchEnrichment();
+    v.workerUpdated = st.enrichAt ? ('обновлено ' + st.enrichAt.toLocaleTimeString('ru-RU')) : '';
     v.onRefreshBackend = () => { this.initBackend(); this.setState({ toast: { text: 'Данные обновлены из бэкенда' } }); };
 
     // Navigation
     v.onFridge=()=>this.go('fridge'); v.onPreps=()=>this.go('preps'); v.onAdd=()=>this.go('add');
+    v.onWorker=()=>{ this.fetchEnrichment(); this.go('worker'); };
     v.isFridge=st.route==='fridge'; v.isPreps=st.route==='preps'; v.isAdd=st.route==='add'; v.isComposer=st.route==='composer';
+    v.isWorker=st.route==='worker';
     
     const navBtnS=(act)=>({
       border:'none',borderRadius:'9px',padding:'7px 14px',cursor:'pointer',fontSize:'13.5px',
