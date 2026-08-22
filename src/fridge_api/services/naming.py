@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-
+from decimal import Decimal
 
 BRANDS = [
     "село зеленое", "село зелёное", "epica", "эпика", "магнит", "свежесть", "м свежесть", "м кухня",
@@ -198,3 +198,34 @@ def hermes_dish_name(
     if not name or name.casefold() == fallback.casefold():
         return name or None
     return name
+
+
+#: «2x64 г», «5пак*80г», «6 х 100 мл» — a count and the size of one of them.
+#: The unit is required: «Twix 3*2» carries no unit and means something else
+#: entirely, and reading 2 out of it as a piece weight would put two grams on
+#: the shelf.
+_MULTIPACK = re.compile(
+    r"(?<![\d.,])(\d{1,2})\s*(?:пак|шт|уп)?\s*[x*х×]\s*(\d{1,4}(?:[.,]\d+)?)\s*(г|гр|g|мл|ml)\b",
+    re.IGNORECASE,
+)
+
+#: Below this a "piece" is more likely a parsing accident than a doughnut.
+_MIN_PIECE_G = Decimal("5")
+
+
+def multipack_from_name(name: str) -> tuple[int, Decimal] | None:
+    """How many are in the package, and what one of them weighs.
+
+    A receipt line says «Пончики … 2x64 г» and the parser files 64 as the
+    package's net quantity — which is the weight of one doughnut, not of the
+    pack. Nothing else in the data records that there are two, so a portion of
+    one could only ever be expressed in grams.
+    """
+    match = _MULTIPACK.search(name or "")
+    if match is None:
+        return None
+    count = int(match.group(1))
+    each = Decimal(match.group(2).replace(",", "."))
+    if count < 2 or count > 50 or each < _MIN_PIECE_G:
+        return None
+    return count, each

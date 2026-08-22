@@ -34,6 +34,7 @@ from fridge_api.services.enrichment.types import (
     is_placeholder_nutrition,
 )
 from fridge_api.services.enrichment.yandex_eda import YandexCard, YandexEdaProvider
+from fridge_api.services.naming import multipack_from_name
 
 #: Everything the enrichment does to a shopping list, in one place. Until now
 #: the worker was silent: a receipt went in, products came out enriched or not,
@@ -464,6 +465,29 @@ class EnrichmentWorker:
         product.nutrition_source_url = result.nutrition_source_url
         if not product.image_source_url:
             product.image_source_url = result.image_source_url
+        self._apply_multipack(product)
+
+    @staticmethod
+    def _apply_multipack(product: Product) -> None:
+        """Read «2x64 г» off the name into facts something can count with.
+
+        The receipt parser files 64 as the package's net quantity, which is the
+        weight of one doughnut rather than of the pack — so nothing recorded
+        that there were two, and a portion of one could only be said in grams.
+
+        Only fills what is missing: a piece weight the fridge actually measured
+        outranks a number read off a label.
+        """
+        parsed = multipack_from_name(product.canonical_name or "")
+        if parsed is None:
+            return
+        count, each = parsed
+        if product.piece_weight_g is None:
+            product.piece_weight_g = each
+        unit = (product.net_unit or "").lower()
+        # The parser's classic slip: the pack's «net quantity» is one piece.
+        if unit in ("g", "г", "гр", "ml", "мл") and product.net_quantity == each:
+            product.net_quantity = each * count
 
     def _ensure_alias(self, session: Session, line: ReceiptLine, product: Product) -> None:
         alias = session.scalar(
