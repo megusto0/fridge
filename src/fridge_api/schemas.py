@@ -5,7 +5,14 @@ from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from fridge_api.models import (
     BatchStatus,
@@ -16,6 +23,7 @@ from fridge_api.models import (
     ReceiptOperation,
     ServingUnit,
 )
+from fridge_api.services.icons import icon_for
 
 
 class OrmModel(BaseModel):
@@ -31,6 +39,7 @@ class ProductCreate(BaseModel):
     net_unit: str | None = Field(default=None, max_length=16)
     piece_weight_g: Decimal | None = Field(default=None, gt=0)
     serving_unit: ServingUnit | None = None
+
     kcal_per_100: Decimal | None = Field(default=None, ge=0)
     protein_per_100: Decimal | None = Field(default=None, ge=0)
     fat_per_100: Decimal | None = Field(default=None, ge=0)
@@ -201,6 +210,13 @@ class InventoryLotResponse(OrmModel):
 class InventoryProductSummary(OrmModel):
     id: uuid.UUID
     canonical_name: str
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def icon(self) -> str:
+        """Something to show until a photograph exists."""
+        return icon_for(self.canonical_name)
+
     brand: str | None
     gtin: str | None
     net_quantity: Decimal | None
@@ -333,6 +349,13 @@ class MealPrepBatchResponse(OrmModel):
     id: uuid.UUID
     idempotency_key: str
     name: str
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def icon(self) -> str:
+        """Something to show until the batch has been photographed."""
+        return icon_for(self.name)
+
     name_source: str
     status: BatchStatus
     image_url: str | None
